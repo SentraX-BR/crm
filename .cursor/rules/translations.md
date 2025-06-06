@@ -14,7 +14,7 @@ Twenty uses Lingui for internationalization (i18n) and Crowdin for translation m
 Translation files are managed in multiple packages:
 - `twenty-front`: Frontend translations
 - `twenty-server`: Backend translations
-- `twenty-emails`: Email template translations
+- `sentrax-emails`: Email template translations
 
 ## Translation Process
 
@@ -68,7 +68,7 @@ Translation files are managed in multiple packages:
   # Extract new strings
   nx run twenty-front:lingui:extract
   nx run twenty-server:lingui:extract
-  nx run twenty-emails:lingui:extract
+  nx run sentrax-emails:lingui:extract
   ```
 
 #### 2. Translation Management
@@ -86,7 +86,7 @@ Translation files are managed in multiple packages:
   # Compile translations
   nx run twenty-front:lingui:compile
   nx run twenty-server:lingui:compile
-  nx run twenty-emails:lingui:compile
+  nx run sentrax-emails:lingui:compile
   ```
 
 ## Best Practices

@@ -56,7 +56,7 @@ jobs:
         id: compile_translations_strict
         run: |
           npx nx run twenty-server:lingui:compile --strict
-          npx nx run twenty-emails:lingui:compile --strict
+          npx nx run sentrax-emails:lingui:compile --strict
           npx nx run twenty-front:lingui:compile --strict
         continue-on-error: true
 
@@ -102,7 +102,7 @@ jobs:
         if: inputs.force_pull || steps.compile_translations_strict.outcome == 'failure'
         run: |
           npx nx run twenty-server:lingui:compile
-          npx nx run twenty-emails:lingui:compile 
+          npx nx run sentrax-emails:lingui:compile 
           npx nx run twenty-front:lingui:compile
           git status
           git config --global user.name 'github-actions'

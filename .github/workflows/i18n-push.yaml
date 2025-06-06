@@ -38,7 +38,7 @@ jobs:
       - name: Extract translations
         run: |
           npx nx run twenty-server:lingui:extract
-          npx nx run twenty-emails:lingui:extract
+          npx nx run sentrax-emails:lingui:extract
           npx nx run twenty-front:lingui:extract
 
       - name: Check and commit extracted files
@@ -57,7 +57,7 @@ jobs:
       - name: Compile translations
         run: |
           npx nx run twenty-server:lingui:compile
-          npx nx run twenty-emails:lingui:compile
+          npx nx run sentrax-emails:lingui:compile
           npx nx run twenty-front:lingui:compile
 
       - name: Check and commit compiled files

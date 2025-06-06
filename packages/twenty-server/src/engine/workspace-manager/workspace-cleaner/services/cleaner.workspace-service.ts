@@ -8,7 +8,7 @@ import { differenceInDays } from 'date-fns';
 import {
   CleanSuspendedWorkspaceEmail,
   WarnSuspendedWorkspaceEmail,
-} from 'twenty-emails';
+} from 'sentrax-emails';
 import { isDefined } from 'twenty-shared/utils';
 import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
 import { In, Repository } from 'typeorm';

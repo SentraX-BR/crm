@@ -6,7 +6,7 @@ import { t } from '@lingui/core/macro';
 import { render } from '@react-email/render';
 import { addMilliseconds, differenceInMilliseconds } from 'date-fns';
 import ms from 'ms';
-import { SendEmailVerificationLinkEmail } from 'twenty-emails';
+import { SendEmailVerificationLinkEmail } from 'sentrax-emails';
 import { APP_LOCALES } from 'twenty-shared/translations';
 import { isDefined } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';

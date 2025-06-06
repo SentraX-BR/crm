@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import crypto from 'crypto';
 
 import { render } from '@react-email/render';
-import { SendApprovedAccessDomainValidation } from 'twenty-emails';
+import { SendApprovedAccessDomainValidation } from 'sentrax-emails';
 import { APP_LOCALES } from 'twenty-shared/translations';
 import { Repository } from 'typeorm';
 

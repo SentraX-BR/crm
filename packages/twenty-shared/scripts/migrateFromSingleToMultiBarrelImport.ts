@@ -473,7 +473,7 @@ const main = () => {
     'twenty-front',
     'twenty-ui',
     'twenty-server',
-    'twenty-emails',
+    'sentrax-emails',
     'twenty-zapier',
     'twenty-chrome-extension',
   ];

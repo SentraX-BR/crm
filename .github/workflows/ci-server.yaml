@@ -20,7 +20,7 @@ jobs:
       files: |
         package.json
         packages/twenty-server/**
-        packages/twenty-emails/**
+        packages/sentrax-emails/**
         packages/twenty-shared/**
   server-setup:
     needs: changed-files-check
@@ -210,7 +210,7 @@ jobs:
       - name: Build dependencies
         run: |
           npx nx build twenty-shared
-          npx nx build twenty-emails
+          npx nx build sentrax-emails
       - name: Server / Create Test DB
         run: |
           PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres -c 'CREATE DATABASE "test";'

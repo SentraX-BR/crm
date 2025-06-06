@@ -370,7 +370,7 @@
       "packages/twenty-chrome-extension",
       "packages/twenty-front",
       "packages/twenty-server",
-      "packages/twenty-emails",
+      "packages/sentrax-emails",
       "packages/twenty-ui",
       "packages/twenty-utils",
       "packages/twenty-zapier",

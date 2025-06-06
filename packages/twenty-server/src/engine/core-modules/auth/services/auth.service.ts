@@ -8,7 +8,7 @@ import { t } from '@lingui/core/macro';
 import { render } from '@react-email/render';
 import { addMilliseconds } from 'date-fns';
 import ms from 'ms';
-import { PasswordUpdateNotifyEmail } from 'twenty-emails';
+import { PasswordUpdateNotifyEmail } from 'sentrax-emails';
 import { APP_LOCALES } from 'twenty-shared/translations';
 import { isDefined } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';

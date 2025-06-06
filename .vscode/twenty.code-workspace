@@ -21,8 +21,8 @@
       "path": "../packages/twenty-ui"
     },
     {
-      "name": "packages/twenty-emails",
-      "path": "../packages/twenty-emails"
+      "name": "packages/sentrax-emails",
+      "path": "../packages/sentrax-emails"
     },
     {
       "name": "packages/twenty-shared",
