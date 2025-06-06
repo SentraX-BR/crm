@@ -8,7 +8,7 @@ COPY ./package.json ./yarn.lock ./.yarnrc.yml ./tsconfig.base.json ./nx.json /ap
 COPY ./.yarn/releases /app/.yarn/releases
 
 COPY ./.prettierrc /app/
-COPY ./packages/twenty-emails/package.json /app/packages/twenty-emails/
+COPY ./packages/sentrax-emails/package.json /app/packages/sentrax-emails/
 COPY ./packages/twenty-server/package.json /app/packages/twenty-server/
 COPY ./packages/twenty-server/patches /app/packages/twenty-server/patches
 COPY ./packages/twenty-ui/package.json /app/packages/twenty-ui/
@@ -23,7 +23,7 @@ RUN yarn && yarn cache clean && npx nx reset
 FROM common-deps as twenty-server-build
 
 # Copy sourcecode after installing dependences to accelerate subsequents builds
-COPY ./packages/twenty-emails /app/packages/twenty-emails
+COPY ./packages/sentrax-emails /app/packages/sentrax-emails
 COPY ./packages/twenty-shared /app/packages/twenty-shared
 COPY ./packages/twenty-server /app/packages/twenty-server
 
@@ -34,7 +34,7 @@ RUN mv /app/packages/twenty-server/dist/package.json /app/packages/twenty-server
 RUN rm -rf /app/packages/twenty-server/dist
 RUN mv /app/packages/twenty-server/build /app/packages/twenty-server/dist
 
-RUN yarn workspaces focus --production twenty-emails twenty-shared twenty-server
+RUN yarn workspaces focus --production sentrax-emails twenty-shared twenty-server
 
 
 # Build the front
@@ -74,7 +74,7 @@ COPY --chown=1000 --from=twenty-server-build /app/packages/twenty-server /app/pa
 COPY --chown=1000 --from=twenty-front-build /app/packages/twenty-front/build /app/packages/twenty-server/dist/front
 
 # Set metadata and labels
-LABEL org.opencontainers.image.source=https://github.com/twentyhq/twenty
+LABEL org.opencontainers.image.source=https://github.com/SentraX-BR/crm
 LABEL org.opencontainers.image.description="This image provides a consistent and reproducible environment for the backend and frontend, ensuring it deploys faster and runs the same way regardless of the deployment environment."
 
 RUN mkdir -p /app/.local-storage /app/packages/twenty-server/.local-storage && \

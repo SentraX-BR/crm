@@ -1,12 +1,10 @@
-name: twenty
+version: "3.7"
 
 services:
   server:
     image: twentycrm/twenty:${TAG:-latest}
     volumes:
       - server-local-data:/app/packages/twenty-server/.local-storage
-    ports:
-      - "3000:3000"
     environment:
       NODE_PORT: 3000
       PG_DATABASE_URL: postgres://${PG_DATABASE_USER:-postgres}:${PG_DATABASE_PASSWORD:-postgres}@${PG_DATABASE_HOST:-db}:${PG_DATABASE_PORT:-5432}/default
@@ -34,42 +32,53 @@ services:
       # AUTH_MICROSOFT_CALLBACK_URL: ${AUTH_MICROSOFT_CALLBACK_URL}
       # AUTH_MICROSOFT_APIS_CALLBACK_URL: ${AUTH_MICROSOFT_APIS_CALLBACK_URL}
 
-      # EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-contact@yourdomain.com}
-      # EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-"John from YourDomain"}
-      # EMAIL_SYSTEM_ADDRESS: ${EMAIL_SYSTEM_ADDRESS:-system@yourdomain.com}
-      # EMAIL_DRIVER: ${EMAIL_DRIVER:-smtp}
-      # EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-smtp.gmail.com}
-      # EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-465}
-      # EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:-}
-      # EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME}
+      EMAIL_SYSTEM_ADDRESS: ${EMAIL_SYSTEM_ADDRESS}
+      EMAIL_DRIVER: smtp
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT}
+      EMAIL_SMTP_USER: ${EMAIL_SMTP_USER}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD}
 
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=SentraXnet"
+      - "traefik.http.routers.twentycrm.rule=Host(`crm.sentrax.com.br`)"
+      - "traefik.http.routers.twentycrm.entrypoints=websecure"
+      - "traefik.http.routers.twentycrm.tls.certresolver=letsencryptresolver"
+      - "traefik.http.routers.twentycrm.service=twentycrm"
+      - "traefik.http.services.twentycrm.loadbalancer.server.port=3000"
+
+    networks:
+      - SentraXnet
     depends_on:
       db:
         condition: service_healthy
+    restart: always
     healthcheck:
-      test: curl --fail http://localhost:3000/healthz
+      test: curl --fail http://localhost:3000/healthz || exit 1
       interval: 5s
       timeout: 5s
       retries: 20
-    restart: always
 
   worker:
     image: twentycrm/twenty:${TAG:-latest}
-    volumes:
-      - server-local-data:/app/packages/twenty-server/${STORAGE_LOCAL_PATH:-.local-storage}
     command: ["yarn", "worker:prod"]
+    volumes:
+      - server-local-data:/app/packages/twenty-server/.local-storage
     environment:
       PG_DATABASE_URL: postgres://${PG_DATABASE_USER:-postgres}:${PG_DATABASE_PASSWORD:-postgres}@${PG_DATABASE_HOST:-db}:${PG_DATABASE_PORT:-5432}/default
       SERVER_URL: ${SERVER_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      DISABLE_DB_MIGRATIONS: "true" # it already runs on the server
+      DISABLE_DB_MIGRATIONS: "true"
 
       STORAGE_TYPE: ${STORAGE_TYPE}
       STORAGE_S3_REGION: ${STORAGE_S3_REGION}
       STORAGE_S3_NAME: ${STORAGE_S3_NAME}
       STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT}
 
-      APP_SECRET: ${APP_SECRET:-replace_me_with_a_random_string}
+      APP_SECRET: ${APP_SECRET}
       # MESSAGING_PROVIDER_GMAIL_ENABLED: ${MESSAGING_PROVIDER_GMAIL_ENABLED}
       # CALENDAR_PROVIDER_GOOGLE_ENABLED: ${CALENDAR_PROVIDER_GOOGLE_ENABLED}
       # AUTH_GOOGLE_CLIENT_ID: ${AUTH_GOOGLE_CLIENT_ID}
@@ -84,16 +93,18 @@ services:
       # AUTH_MICROSOFT_CLIENT_SECRET: ${AUTH_MICROSOFT_CLIENT_SECRET}
       # AUTH_MICROSOFT_CALLBACK_URL: ${AUTH_MICROSOFT_CALLBACK_URL}
       # AUTH_MICROSOFT_APIS_CALLBACK_URL: ${AUTH_MICROSOFT_APIS_CALLBACK_URL}
+      
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME}
+      EMAIL_SYSTEM_ADDRESS: ${EMAIL_SYSTEM_ADDRESS}
+      EMAIL_DRIVER: smtp
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT}
+      EMAIL_SMTP_USER: ${EMAIL_SMTP_USER}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD}
 
-      # EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-contact@yourdomain.com}
-      # EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-"John from YourDomain"}
-      # EMAIL_SYSTEM_ADDRESS: ${EMAIL_SYSTEM_ADDRESS:-system@yourdomain.com}
-      # EMAIL_DRIVER: ${EMAIL_DRIVER:-smtp}
-      # EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-smtp.gmail.com}
-      # EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-465}
-      # EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:-}
-      # EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
-
+    networks:
+      - SentraXnet
     depends_on:
       db:
         condition: service_healthy
@@ -108,18 +119,26 @@ services:
     environment:
       POSTGRES_USER: ${PG_DATABASE_USER:-postgres}
       POSTGRES_PASSWORD: ${PG_DATABASE_PASSWORD:-postgres}
+    networks:
+      - SentraXnet
+    restart: always
     healthcheck:
       test: pg_isready -U ${PG_DATABASE_USER:-postgres} -h localhost -d postgres
       interval: 5s
       timeout: 5s
       retries: 10
-    restart: always
 
   redis:
     image: redis
-    restart: always
     command: ["--maxmemory-policy", "noeviction"]
+    networks:
+      - SentraXnet
+    restart: always
 
 volumes:
   db-data:
   server-local-data:
+
+networks:
+  SentraXnet:
+    external: true
