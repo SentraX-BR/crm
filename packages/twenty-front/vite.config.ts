@@ -272,11 +272,12 @@ export default defineConfig(({ command, mode }) => {
     },
     resolve: {
       alias: {
+        '@': path.resolve(__dirname, 'src'),
+        '~': path.resolve(__dirname, 'src'), // ✅ adicione esta linha
         path: 'rollup-plugin-node-polyfills/polyfills/path',
-        // https://github.com/twentyhq/twenty/pull/10782/files
-        // This will likely be migrated to twenty-ui package when built separately
         '@tabler/icons-react': '@tabler/icons-react/dist/esm/icons/index.mjs',
       },
     },
+    
   };
 });
