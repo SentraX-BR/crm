@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
@@ -9,18 +9,31 @@ import {
 } from 'src/engine/core-modules/app-token/app-token.entity';
 import { DomainManagerService } from 'src/engine/core-modules/domain-manager/services/domain-manager.service';
 import { EmailService } from 'src/engine/core-modules/email/email.service';
+import { FileService } from 'src/engine/core-modules/file/services/file.service';
+import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
 import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
-import { User } from 'src/engine/core-modules/user/user.entity';
 import { WorkspaceInvitationException } from 'src/engine/core-modules/workspace-invitation/workspace-invitation.exception';
 import { WorkspaceService } from 'src/engine/core-modules/workspace/services/workspace.service';
 import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
+import { type WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 import { WorkspaceInvitationService } from './workspace-invitation.service';
 
 // To fix a circular dependency issue
 jest.mock('src/engine/core-modules/workspace/services/workspace.service');
+
+// To avoid dynamic import issues in Jest
+jest.mock('@react-email/render', () => ({
+  render: jest.fn().mockImplementation(async (template, options) => {
+    if (options?.plainText) {
+      return 'Plain Text Email';
+    }
+
+    return '<html><body>HTML email content</body></html>';
+  }),
+}));
 
 describe('WorkspaceInvitationService', () => {
   let service: WorkspaceInvitationService;
@@ -35,15 +48,15 @@ describe('WorkspaceInvitationService', () => {
       providers: [
         WorkspaceInvitationService,
         {
-          provide: getRepositoryToken(AppToken, 'core'),
+          provide: getRepositoryToken(AppToken),
           useClass: Repository,
         },
         {
-          provide: getRepositoryToken(UserWorkspace, 'core'),
+          provide: getRepositoryToken(UserWorkspace),
           useClass: Repository,
         },
         {
-          provide: getRepositoryToken(Workspace, 'core'),
+          provide: getRepositoryToken(Workspace),
           useClass: Repository,
         },
         {
@@ -70,6 +83,7 @@ describe('WorkspaceInvitationService', () => {
           provide: OnboardingService,
           useValue: {
             setOnboardingInviteTeamPending: jest.fn(),
+            setOnboardingBookOnboardingPending: jest.fn(),
           },
         },
         {
@@ -82,6 +96,22 @@ describe('WorkspaceInvitationService', () => {
             // Add other methods as needed
           },
         },
+        {
+          provide: I18nService,
+          useValue: {
+            getI18nInstance: jest.fn().mockReturnValue({
+              _: jest.fn().mockReturnValue('mocked-translation'),
+            }),
+          },
+        },
+        {
+          provide: FileService,
+          useValue: {
+            signFileUrl: jest
+              .fn()
+              .mockReturnValue('https://signed-url.com/logo.png'),
+          },
+        },
       ],
     }).compile();
 
@@ -89,10 +119,10 @@ describe('WorkspaceInvitationService', () => {
       WorkspaceInvitationService,
     );
     appTokenRepository = module.get<Repository<AppToken>>(
-      getRepositoryToken(AppToken, 'core'),
+      getRepositoryToken(AppToken),
     );
     userWorkspaceRepository = module.get<Repository<UserWorkspace>>(
-      getRepositoryToken(UserWorkspace, 'core'),
+      getRepositoryToken(UserWorkspace),
     );
     twentyConfigService = module.get<TwentyConfigService>(TwentyConfigService);
     emailService = module.get<EmailService>(EmailService);
@@ -148,7 +178,11 @@ describe('WorkspaceInvitationService', () => {
         inviteHash: 'invite-hash',
         displayName: 'Test Workspace',
       } as Workspace;
-      const sender = { email: 'sender@example.com', firstName: 'Sender' };
+      const sender = {
+        userEmail: 'sender@example.com',
+        name: { firstName: 'Sender' },
+        locale: 'en',
+      };
 
       jest.spyOn(service, 'createWorkspaceInvitation').mockResolvedValue({
         context: { email: 'test@example.com' },
@@ -166,7 +200,7 @@ describe('WorkspaceInvitationService', () => {
       const result = await service.sendInvitations(
         emails,
         workspace,
-        sender as User,
+        sender as WorkspaceMemberWorkspaceEntity,
       );
 
       expect(result.success).toBe(true);
@@ -177,6 +211,12 @@ describe('WorkspaceInvitationService', () => {
       ).toHaveBeenCalledWith({
         workspaceId: workspace.id,
         value: false,
+      });
+      expect(
+        onboardingService.setOnboardingBookOnboardingPending,
+      ).toHaveBeenCalledWith({
+        workspaceId: workspace.id,
+        value: true,
       });
     });
   });

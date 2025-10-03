@@ -1,17 +1,14 @@
 import { isNull, isUndefined } from '@sniptt/guards';
 
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 import { getNodeTypename } from '@/object-record/cache/utils/getNodeTypename';
 import { getObjectTypename } from '@/object-record/cache/utils/getObjectTypename';
 import { getRecordConnectionFromRecords } from '@/object-record/cache/utils/getRecordConnectionFromRecords';
 import { getRefName } from '@/object-record/cache/utils/getRefName';
-import { RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 import { isDefined } from 'twenty-shared/utils';
-import {
-  FieldMetadataType,
-  RelationDefinitionType,
-} from '~/generated-metadata/graphql';
+import { FieldMetadataType, RelationType } from '~/generated-metadata/graphql';
 import { pascalCase } from '~/utils/string/pascalCase';
 
 export const getRecordNodeFromRecord = <T extends ObjectRecord>({
@@ -63,13 +60,12 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
 
         if (
           field.type === FieldMetadataType.RELATION &&
-          field.relationDefinition?.direction ===
-            RelationDefinitionType.ONE_TO_MANY
+          field.relation?.type === RelationType.ONE_TO_MANY
         ) {
           const oneToManyObjectMetadataItem = objectMetadataItems.find(
             (item) =>
               item.namePlural ===
-              field.relationDefinition?.targetObjectMetadata.namePlural,
+              field.relation?.targetObjectMetadata.namePlural,
           );
 
           if (!oneToManyObjectMetadataItem) {
@@ -103,9 +99,7 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
             }
 
             if (
-              isUndefined(
-                field.relationDefinition?.targetObjectMetadata.nameSingular,
-              )
+              isUndefined(field.relation?.targetObjectMetadata.nameSingular)
             ) {
               return undefined;
             }
@@ -119,7 +113,7 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
             }
 
             const typeName = getObjectTypename(
-              field.relationDefinition?.targetObjectMetadata.nameSingular,
+              field.relation?.targetObjectMetadata.nameSingular,
             );
 
             if (computeReferences) {

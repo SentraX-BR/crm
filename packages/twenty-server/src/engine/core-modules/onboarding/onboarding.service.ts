@@ -1,23 +1,28 @@
 import { Injectable } from '@nestjs/common';
 
+import { isNonEmptyString } from '@sniptt/guards';
+import { isDefined } from 'twenty-shared/utils';
 import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
 
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
 import { OnboardingStatus } from 'src/engine/core-modules/onboarding/enums/onboarding-status.enum';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { UserVarsService } from 'src/engine/core-modules/user/user-vars/services/user-vars.service';
-import { User } from 'src/engine/core-modules/user/user.entity';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
+import { type User } from 'src/engine/core-modules/user/user.entity';
+import { type Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
 
 export enum OnboardingStepKeys {
   ONBOARDING_CONNECT_ACCOUNT_PENDING = 'ONBOARDING_CONNECT_ACCOUNT_PENDING',
   ONBOARDING_INVITE_TEAM_PENDING = 'ONBOARDING_INVITE_TEAM_PENDING',
   ONBOARDING_CREATE_PROFILE_PENDING = 'ONBOARDING_CREATE_PROFILE_PENDING',
+  ONBOARDING_BOOK_ONBOARDING_PENDING = 'ONBOARDING_BOOK_ONBOARDING_PENDING',
 }
 
 export type OnboardingKeyValueTypeMap = {
   [OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING]: boolean;
   [OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING]: boolean;
   [OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING]: boolean;
+  [OnboardingStepKeys.ONBOARDING_BOOK_ONBOARDING_PENDING]: boolean;
 };
 
 @Injectable()
@@ -25,6 +30,7 @@ export class OnboardingService {
   constructor(
     private readonly billingService: BillingService,
     private readonly userVarsService: UserVarsService<OnboardingKeyValueTypeMap>,
+    private readonly twentyConfigService: TwentyConfigService,
   ) {}
 
   private isWorkspaceActivationPending(workspace: Workspace) {
@@ -62,6 +68,10 @@ export class OnboardingService {
     const isInviteTeamPending =
       userVars.get(OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING) === true;
 
+    const isBookOnboardingPending =
+      userVars.get(OnboardingStepKeys.ONBOARDING_BOOK_ONBOARDING_PENDING) ===
+      true;
+
     if (isProfileCreationPending) {
       return OnboardingStatus.PROFILE_CREATION;
     }
@@ -72,6 +82,26 @@ export class OnboardingService {
 
     if (isInviteTeamPending) {
       return OnboardingStatus.INVITE_TEAM;
+    }
+
+    if (isBookOnboardingPending) {
+      const calendarBookingPageId = this.twentyConfigService.get(
+        'CALENDAR_BOOKING_PAGE_ID',
+      );
+      const isBookingConfigured =
+        isDefined(calendarBookingPageId) &&
+        isNonEmptyString(calendarBookingPageId);
+
+      if (!isBookingConfigured) {
+        await this.userVarsService.delete({
+          workspaceId: workspace.id,
+          key: OnboardingStepKeys.ONBOARDING_BOOK_ONBOARDING_PENDING,
+        });
+
+        return OnboardingStatus.COMPLETED;
+      }
+
+      return OnboardingStatus.BOOK_ONBOARDING;
     }
 
     return OnboardingStatus.COMPLETED;
@@ -150,6 +180,37 @@ export class OnboardingService {
       userId,
       workspaceId,
       key: OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING,
+      value: true,
+    });
+  }
+
+  async setOnboardingBookOnboardingPending({
+    workspaceId,
+    value,
+  }: {
+    workspaceId: string;
+    value: boolean;
+  }) {
+    const calendarBookingPageId = this.twentyConfigService.get(
+      'CALENDAR_BOOKING_PAGE_ID',
+    );
+
+    const isBookingConfigured =
+      isDefined(calendarBookingPageId) &&
+      isNonEmptyString(calendarBookingPageId);
+
+    if (!value || !isBookingConfigured) {
+      await this.userVarsService.delete({
+        workspaceId,
+        key: OnboardingStepKeys.ONBOARDING_BOOK_ONBOARDING_PENDING,
+      });
+
+      return;
+    }
+
+    await this.userVarsService.set({
+      workspaceId,
+      key: OnboardingStepKeys.ONBOARDING_BOOK_ONBOARDING_PENDING,
       value: true,
     });
   }

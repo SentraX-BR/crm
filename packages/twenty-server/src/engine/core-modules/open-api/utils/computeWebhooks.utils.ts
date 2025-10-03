@@ -1,8 +1,8 @@
-import { OpenAPIV3_1 } from 'openapi-types';
+import { type OpenAPIV3_1 } from 'openapi-types';
 import { capitalize } from 'twenty-shared/utils';
 
 import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 
 export const computeWebhooks = (
   type: DatabaseEventAction,
@@ -101,7 +101,7 @@ export const computeWebhooks = (
                   example: '2024-02-14T11:27:01.779Z',
                 },
                 record: {
-                  $ref: `#/components/schemas/${capitalize(item.nameSingular)} for Response`,
+                  $ref: `#/components/schemas/${capitalize(item.nameSingular)}ForResponse`,
                 },
                 ...(type === DatabaseEventAction.UPDATED && { updatedFields }),
               },

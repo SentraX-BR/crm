@@ -10,12 +10,12 @@ import { SettingsIntegrationRemoteTableSchemaUpdate } from '@/settings/integrati
 import { SettingsIntegrationRemoteTableSyncStatusToggle } from '@/settings/integrations/components/SettingsIntegrationRemoteTableSyncStatusToggle';
 import {
   DistantTableUpdate,
-  RemoteTable,
-  RemoteTableStatus,
+  type RemoteTable,
+  type RemoteTableStatus,
 } from '~/generated-metadata/graphql';
 
 export const settingsIntegrationsDatabaseTablesSchema = z.object({
-  syncedTablesByName: z.record(z.boolean()),
+  syncedTablesByName: z.record(z.string(), z.boolean()),
 });
 
 export type SettingsIntegrationsDatabaseTablesFormValues = z.infer<

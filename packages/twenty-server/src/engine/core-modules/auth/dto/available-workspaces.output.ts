@@ -2,7 +2,8 @@
 
 import { Field, ObjectType } from '@nestjs/graphql';
 
-import { SSOConfiguration } from 'src/engine/core-modules/sso/types/SSOConfigurations.type';
+import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { type SSOConfiguration } from 'src/engine/core-modules/sso/types/SSOConfigurations.type';
 import {
   IdentityProviderType,
   SSOIdentityProviderStatus,
@@ -14,7 +15,7 @@ class SSOConnection {
   @Field(() => IdentityProviderType)
   type: SSOConfiguration['type'];
 
-  @Field(() => String)
+  @Field(() => UUIDScalarType)
   id: string;
 
   @Field(() => String)
@@ -28,12 +29,21 @@ class SSOConnection {
 }
 
 @ObjectType()
-export class AvailableWorkspaceOutput {
-  @Field(() => String)
+export class AvailableWorkspace {
+  @Field(() => UUIDScalarType)
   id: string;
 
   @Field(() => String, { nullable: true })
   displayName?: string;
+
+  @Field(() => String, { nullable: true })
+  loginToken?: string;
+
+  @Field(() => String, { nullable: true })
+  personalInviteToken?: string;
+
+  @Field(() => String, { nullable: true })
+  inviteHash?: string;
 
   @Field(() => WorkspaceUrls)
   workspaceUrls: WorkspaceUrls;
@@ -43,4 +53,13 @@ export class AvailableWorkspaceOutput {
 
   @Field(() => [SSOConnection])
   sso: SSOConnection[];
+}
+
+@ObjectType()
+export class AvailableWorkspaces {
+  @Field(() => [AvailableWorkspace])
+  availableWorkspacesForSignIn: Array<AvailableWorkspace>;
+
+  @Field(() => [AvailableWorkspace])
+  availableWorkspacesForSignUp: Array<AvailableWorkspace>;
 }

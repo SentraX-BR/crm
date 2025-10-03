@@ -1,6 +1,7 @@
 import { FieldMetadataType } from 'twenty-shared/types';
 
-import { FieldMetadataInterface } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata.interface';
+import { type FieldMetadataRelationSettings } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
+import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
 
 import {
   fieldCurrencyMock,
@@ -9,41 +10,53 @@ import {
   objectMetadataItemMock,
 } from 'src/engine/api/__mocks__/object-metadata-item.mock';
 import { mapFieldMetadataToGraphqlQuery } from 'src/engine/api/rest/core/query-builder/utils/map-field-metadata-to-graphql-query.utils';
-import { RelationMetadataType } from 'src/engine/metadata-modules/relation-metadata/relation-metadata.entity';
-import { FieldMetadataMap } from 'src/engine/metadata-modules/types/field-metadata-map';
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
+import { type FieldMetadataMap } from 'src/engine/metadata-modules/types/field-metadata-map';
+import { type ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
+import { type ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
+import { getMockFieldMetadataEntity } from 'src/utils/__test__/get-field-metadata-entity.mock';
 
 describe('mapFieldMetadataToGraphqlQuery', () => {
-  const typedFieldNumberMock: FieldMetadataInterface = {
-    id: 'field-number-id',
+  const typedFieldNumberMock = getMockFieldMetadataEntity({
+    workspaceId: '20202020-0000-0000-0000-000000000000',
+    objectMetadataId: '20202020-0000-0000-0000-000000000001',
+    id: '20202020-0000-0000-0000-000000000002',
     name: fieldNumberMock.name,
     type: fieldNumberMock.type,
     label: 'Field Number',
-    objectMetadataId: 'object-metadata-id',
     isNullable: fieldNumberMock.isNullable,
     defaultValue: fieldNumberMock.defaultValue,
-  };
+    isLabelSyncedWithName: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
-  const typedFieldTextMock: FieldMetadataInterface = {
-    id: 'field-text-id',
+  const typedFieldTextMock = getMockFieldMetadataEntity({
+    workspaceId: '20202020-0000-0000-0000-000000000000',
+    objectMetadataId: '20202020-0000-0000-0000-000000000001',
+    id: '20202020-0000-0000-0000-000000000003',
     name: fieldTextMock.name,
     type: fieldTextMock.type,
     label: 'Field Text',
-    objectMetadataId: 'object-metadata-id',
     isNullable: fieldTextMock.isNullable,
     defaultValue: fieldTextMock.defaultValue,
-  };
+    isLabelSyncedWithName: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
-  const typedFieldCurrencyMock: FieldMetadataInterface = {
-    id: 'field-currency-id',
+  const typedFieldCurrencyMock = getMockFieldMetadataEntity({
+    workspaceId: '20202020-0000-0000-0000-000000000000',
+    objectMetadataId: '20202020-0000-0000-0000-000000000001',
+    id: '20202020-0000-0000-0000-000000000004',
     name: fieldCurrencyMock.name,
     type: fieldCurrencyMock.type,
     label: 'Field Currency',
-    objectMetadataId: 'object-metadata-id',
     isNullable: fieldCurrencyMock.isNullable,
     defaultValue: fieldCurrencyMock.defaultValue,
-  };
+    isLabelSyncedWithName: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
   const fieldsById: FieldMetadataMap = {
     'field-number-id': typedFieldNumberMock,
@@ -51,17 +64,16 @@ describe('mapFieldMetadataToGraphqlQuery', () => {
     'field-currency-id': typedFieldCurrencyMock,
   };
 
-  const fieldsByName: FieldMetadataMap = {
-    [typedFieldNumberMock.name]: typedFieldNumberMock,
-    [typedFieldTextMock.name]: typedFieldTextMock,
-    [typedFieldCurrencyMock.name]: typedFieldCurrencyMock,
-  };
-
   const typedObjectMetadataItem: ObjectMetadataItemWithFieldMaps = {
     ...objectMetadataItemMock,
     fieldsById,
-    fieldsByName,
-    fieldsByJoinColumnName: {},
+    fieldIdByName: {
+      [typedFieldNumberMock.name]: typedFieldNumberMock.id,
+      [typedFieldTextMock.name]: typedFieldTextMock.id,
+      [typedFieldCurrencyMock.name]: typedFieldCurrencyMock.id,
+    },
+    fieldIdByJoinColumnName: {},
+    indexMetadatas: [],
   };
 
   const objectMetadataMapsMock: ObjectMetadataMaps = {
@@ -103,17 +115,25 @@ describe('mapFieldMetadataToGraphqlQuery', () => {
   describe('should handle all field metadata types', () => {
     Object.values(FieldMetadataType).forEach((fieldMetadataType) => {
       it(`with field type ${fieldMetadataType}`, () => {
-        const field: FieldMetadataInterface = {
-          id: 'test-field-id',
+        const field = getMockFieldMetadataEntity({
+          workspaceId: '20202020-0000-0000-0000-000000000000',
+          objectMetadataId: '20202020-0000-0000-0000-000000000001',
+          id: '20202020-0000-0000-0000-000000000005',
           type: fieldMetadataType,
           name: 'toObjectMetadataName',
           label: 'Test Field',
-          objectMetadataId: 'object-metadata-id',
-          fromRelationMetadata: {
-            relationType: RelationMetadataType.ONE_TO_MANY,
-            toObjectMetadataId: objectMetadataItemMock.id,
-          } as any,
-        };
+          isNullable: true,
+          isLabelSyncedWithName: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          settings:
+            fieldMetadataType === FieldMetadataType.RELATION ||
+            fieldMetadataType === FieldMetadataType.MORPH_RELATION
+              ? ({
+                  relationType: RelationType.MANY_TO_ONE,
+                } as FieldMetadataRelationSettings)
+              : null,
+        });
 
         expect(
           mapFieldMetadataToGraphqlQuery(objectMetadataMapsMock, field),

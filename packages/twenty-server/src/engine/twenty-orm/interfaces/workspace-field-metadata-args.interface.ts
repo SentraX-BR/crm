@@ -1,11 +1,11 @@
-import { FieldMetadataType } from 'twenty-shared/types';
+import { type FieldMetadataType } from 'twenty-shared/types';
 
-import { FieldMetadataDefaultValue } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-default-value.interface';
-import { FieldMetadataOptions } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-options.interface';
-import { FieldMetadataSettings } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
-import { Gate } from 'src/engine/twenty-orm/interfaces/gate.interface';
+import { type FieldMetadataDefaultValue } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-default-value.interface';
+import { type FieldMetadataOptions } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-options.interface';
+import { type FieldMetadataSettings } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
+import { type Gate } from 'src/engine/twenty-orm/interfaces/gate.interface';
 
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 
 export interface WorkspaceFieldMetadataArgs {
   /**
@@ -16,7 +16,7 @@ export interface WorkspaceFieldMetadataArgs {
   /**
    * Class to which field is applied.
    */
-  // eslint-disable-next-line @typescript-eslint/ban-types
+
   readonly target: Function;
 
   /**
@@ -72,6 +72,11 @@ export interface WorkspaceFieldMetadataArgs {
   readonly isSystem: boolean;
 
   /**
+   * Is UI read-only field.
+   */
+  readonly isUIReadOnly: boolean;
+
+  /**
    * Is nullable field.
    */
   readonly isNullable: boolean;
@@ -105,4 +110,6 @@ export interface WorkspaceFieldMetadataArgs {
    * Is active field.
    */
   readonly asExpression?: string;
+
+  readonly isLabelSyncedWithName: boolean;
 }

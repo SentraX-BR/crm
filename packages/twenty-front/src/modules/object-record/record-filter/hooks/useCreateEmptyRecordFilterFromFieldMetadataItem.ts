@@ -1,8 +1,9 @@
-import { FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
-import { getFilterTypeFromFieldType } from '@/object-metadata/utils/formatFieldMetadataItemsAsFilterDefinitions';
-import { RecordFilter } from '@/object-record/record-filter/types/RecordFilter';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { getInitialFilterValue } from '@/object-record/object-filter-dropdown/utils/getInitialFilterValue';
+import { type RecordFilter } from '@/object-record/record-filter/types/RecordFilter';
 import { getDefaultSubFieldNameForCompositeFilterableFieldType } from '@/object-record/record-filter/utils/getDefaultSubFieldNameForCompositeFilterableFieldType';
 import { getRecordFilterOperands } from '@/object-record/record-filter/utils/getRecordFilterOperands';
+import { getFilterTypeFromFieldType } from 'twenty-shared/utils';
 import { v4 } from 'uuid';
 
 export const useCreateEmptyRecordFilterFromFieldMetadataItem = () => {
@@ -20,14 +21,19 @@ export const useCreateEmptyRecordFilterFromFieldMetadataItem = () => {
     const defaultSubFieldName =
       getDefaultSubFieldNameForCompositeFilterableFieldType(filterType);
 
+    const { displayValue, value } = getInitialFilterValue(
+      filterType,
+      defaultOperand,
+    );
+
     const newRecordFilter: RecordFilter = {
       id: v4(),
       fieldMetadataId: fieldMetadataItem.id,
       operand: defaultOperand,
-      displayValue: '',
+      displayValue,
       label: fieldMetadataItem.label,
       type: filterType,
-      value: '',
+      value,
       subFieldName: defaultSubFieldName,
     };
 

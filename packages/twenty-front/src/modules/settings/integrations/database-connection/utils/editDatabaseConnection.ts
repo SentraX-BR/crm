@@ -7,7 +7,8 @@ import {
   settingsIntegrationPostgreSQLConnectionFormSchema,
   settingsIntegrationStripeConnectionFormSchema,
 } from '@/settings/integrations/database-connection/components/SettingsIntegrationDatabaseConnectionForm';
-import { RemoteServer } from '~/generated-metadata/graphql';
+import { CustomError } from 'twenty-shared/utils';
+import { type RemoteServer } from '~/generated-metadata/graphql';
 
 export const getEditionSchemaForForm = (databaseKey: string) => {
   switch (databaseKey) {
@@ -18,7 +19,10 @@ export const getEditionSchemaForForm = (databaseKey: string) => {
     case 'stripe':
       return settingsIntegrationStripeConnectionFormSchema;
     default:
-      throw new Error(`No schema found for database key: ${databaseKey}`);
+      throw new CustomError(
+        `No schema found for database key: ${databaseKey}`,
+        'NO_SCHEMA_FOUND',
+      );
   }
 };
 
@@ -91,6 +95,9 @@ export const formatValuesForUpdate = ({
         label: formValues.label,
       };
     default:
-      throw new Error(`Cannot format values for database key: ${databaseKey}`);
+      throw new CustomError(
+        `Cannot format values for database key: ${databaseKey}`,
+        'CANNOT_FORMAT_VALUES',
+      );
   }
 };

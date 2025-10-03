@@ -8,6 +8,7 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  Index,
   OneToMany,
   PrimaryGeneratedColumn,
   Relation,
@@ -15,13 +16,32 @@ import {
 } from 'typeorm';
 
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { ApiKey } from 'src/engine/core-modules/api-key/api-key.entity';
 import { AppToken } from 'src/engine/core-modules/app-token/app-token.entity';
 import { ApprovedAccessDomain } from 'src/engine/core-modules/approved-access-domain/approved-access-domain.entity';
+import { EmailingDomain } from 'src/engine/core-modules/emailing-domain/emailing-domain.entity';
 import { FeatureFlag } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
 import { KeyValuePair } from 'src/engine/core-modules/key-value-pair/key-value-pair.entity';
 import { PostgresCredentials } from 'src/engine/core-modules/postgres-credentials/postgres-credentials.entity';
+import { PublicDomain } from 'src/engine/core-modules/public-domain/public-domain.entity';
 import { WorkspaceSSOIdentityProvider } from 'src/engine/core-modules/sso/workspace-sso-identity-provider.entity';
 import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { ViewFieldDTO } from 'src/engine/core-modules/view/dtos/view-field.dto';
+import { ViewFilterGroupDTO } from 'src/engine/core-modules/view/dtos/view-filter-group.dto';
+import { ViewFilterDTO } from 'src/engine/core-modules/view/dtos/view-filter.dto';
+import { ViewGroupDTO } from 'src/engine/core-modules/view/dtos/view-group.dto';
+import { ViewSortDTO } from 'src/engine/core-modules/view/dtos/view-sort.dto';
+import { ViewDTO } from 'src/engine/core-modules/view/dtos/view.dto';
+import { ViewFieldEntity } from 'src/engine/core-modules/view/entities/view-field.entity';
+import { ViewFilterGroupEntity } from 'src/engine/core-modules/view/entities/view-filter-group.entity';
+import { ViewFilterEntity } from 'src/engine/core-modules/view/entities/view-filter.entity';
+import { ViewGroupEntity } from 'src/engine/core-modules/view/entities/view-group.entity';
+import { ViewSortEntity } from 'src/engine/core-modules/view/entities/view-sort.entity';
+import { ViewEntity } from 'src/engine/core-modules/view/entities/view.entity';
+import { Webhook } from 'src/engine/core-modules/webhook/webhook.entity';
+import { AgentHandoffEntity } from 'src/engine/metadata-modules/agent/agent-handoff.entity';
+import { AgentEntity } from 'src/engine/metadata-modules/agent/agent.entity';
+import { AgentDTO } from 'src/engine/metadata-modules/agent/dtos/agent.dto';
 import { RoleDTO } from 'src/engine/metadata-modules/role/dtos/role.dto';
 
 registerEnumType(WorkspaceActivationStatus, {
@@ -97,6 +117,12 @@ export class Workspace {
   )
   approvedAccessDomains: Relation<ApprovedAccessDomain[]>;
 
+  @OneToMany(() => EmailingDomain, (emailingDomain) => emailingDomain.workspace)
+  emailingDomains: Relation<EmailingDomain[]>;
+
+  @OneToMany(() => PublicDomain, (publicDomain) => publicDomain.workspace)
+  publicDomains: Relation<PublicDomain[]>;
+
   @Field({ nullable: true })
   workspaceMembersCount: number;
 
@@ -107,6 +133,7 @@ export class Workspace {
     enum: WorkspaceActivationStatus,
     default: WorkspaceActivationStatus.INACTIVE,
   })
+  @Index('IDX_WORKSPACE_ACTIVATION_STATUS')
   activationStatus: WorkspaceActivationStatus;
 
   @OneToMany(
@@ -120,6 +147,49 @@ export class Workspace {
     (workspaceSSOIdentityProviders) => workspaceSSOIdentityProviders.workspace,
   )
   workspaceSSOIdentityProviders: Relation<WorkspaceSSOIdentityProvider[]>;
+
+  @OneToMany(() => AgentEntity, (agent) => agent.workspace, {
+    onDelete: 'CASCADE',
+  })
+  agents: Relation<AgentEntity[]>;
+
+  @OneToMany(() => AgentHandoffEntity, (handoff) => handoff.workspace, {
+    onDelete: 'CASCADE',
+  })
+  agentHandoffs: Relation<AgentHandoffEntity[]>;
+
+  @OneToMany(() => Webhook, (webhook) => webhook.workspace)
+  webhooks: Relation<Webhook[]>;
+
+  @OneToMany(() => ApiKey, (apiKey) => apiKey.workspace)
+  apiKeys: Relation<ApiKey[]>;
+
+  @Field(() => [ViewDTO], { nullable: true })
+  @OneToMany(() => ViewEntity, (view) => view.workspace)
+  views: Relation<ViewEntity[]>;
+
+  @Field(() => [ViewFieldDTO], { nullable: true })
+  @OneToMany(() => ViewFieldEntity, (viewField) => viewField.workspace)
+  viewFields: Relation<ViewFieldEntity[]>;
+
+  @Field(() => [ViewFilterDTO], { nullable: true })
+  @OneToMany(() => ViewFilterEntity, (viewFilter) => viewFilter.workspace)
+  viewFilters: Relation<ViewFilterEntity[]>;
+
+  @Field(() => [ViewFilterGroupDTO], { nullable: true })
+  @OneToMany(
+    () => ViewFilterGroupEntity,
+    (viewFilterGroup) => viewFilterGroup.workspace,
+  )
+  viewFilterGroups: Relation<ViewFilterGroupEntity[]>;
+
+  @Field(() => [ViewGroupDTO], { nullable: true })
+  @OneToMany(() => ViewGroupEntity, (viewGroup) => viewGroup.workspace)
+  viewGroups: Relation<ViewGroupEntity[]>;
+
+  @Field(() => [ViewSortDTO], { nullable: true })
+  @OneToMany(() => ViewSortEntity, (viewSort) => viewSort.workspace)
+  viewSorts: Relation<ViewSortEntity[]>;
 
   @Field()
   @Column({ default: 1 })
@@ -146,6 +216,10 @@ export class Workspace {
   isGoogleAuthEnabled: boolean;
 
   @Field()
+  @Column({ default: false })
+  isTwoFactorAuthenticationEnforced: boolean;
+
+  @Field()
   @Column({ default: true })
   isPasswordAuthEnabled: boolean;
 
@@ -157,11 +231,19 @@ export class Workspace {
   @Column({ default: false })
   isCustomDomainEnabled: boolean;
 
+  // TODO: set as non nullable
   @Column({ nullable: true, type: 'uuid' })
   defaultRoleId: string | null;
 
   @Field(() => RoleDTO, { nullable: true })
   defaultRole: RoleDTO | null;
+
+  // TODO: set as non nullable
+  @Column({ nullable: true, type: 'uuid' })
+  defaultAgentId: string | null;
+
+  @Field(() => AgentDTO, { nullable: true })
+  defaultAgent: AgentDTO | null;
 
   @Field(() => String, { nullable: true })
   @Column({ type: 'varchar', nullable: true })

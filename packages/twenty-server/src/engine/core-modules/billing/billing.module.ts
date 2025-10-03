@@ -3,9 +3,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { BillingController } from 'src/engine/core-modules/billing/billing.controller';
+import { AiModule } from 'src/engine/core-modules/ai/ai.module';
 import { BillingResolver } from 'src/engine/core-modules/billing/billing.resolver';
-import { BillingAddWorkflowSubscriptionItemCommand } from 'src/engine/core-modules/billing/commands/billing-add-workflow-subscription-item.command';
 import { BillingSyncCustomerDataCommand } from 'src/engine/core-modules/billing/commands/billing-sync-customer-data.command';
 import { BillingSyncPlansDataCommand } from 'src/engine/core-modules/billing/commands/billing-sync-plans-data.command';
 import { BillingUpdateSubscriptionPriceCommand } from 'src/engine/core-modules/billing/commands/billing-update-subscription-price.command';
@@ -27,13 +26,6 @@ import { BillingSubscriptionService } from 'src/engine/core-modules/billing/serv
 import { BillingUsageService } from 'src/engine/core-modules/billing/services/billing-usage.service';
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
 import { StripeModule } from 'src/engine/core-modules/billing/stripe/stripe.module';
-import { BillingWebhookAlertService } from 'src/engine/core-modules/billing/webhooks/services/billing-webhook-alert.service';
-import { BillingWebhookCustomerService } from 'src/engine/core-modules/billing/webhooks/services/billing-webhook-customer.service';
-import { BillingWebhookEntitlementService } from 'src/engine/core-modules/billing/webhooks/services/billing-webhook-entitlement.service';
-import { BillingWebhookInvoiceService } from 'src/engine/core-modules/billing/webhooks/services/billing-webhook-invoice.service';
-import { BillingWebhookPriceService } from 'src/engine/core-modules/billing/webhooks/services/billing-webhook-price.service';
-import { BillingWebhookProductService } from 'src/engine/core-modules/billing/webhooks/services/billing-webhook-product.service';
-import { BillingWebhookSubscriptionService } from 'src/engine/core-modules/billing/webhooks/services/billing-webhook-subscription.service';
 import { DomainManagerModule } from 'src/engine/core-modules/domain-manager/domain-manager.module';
 import { FeatureFlag } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
 import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
@@ -41,6 +33,8 @@ import { MessageQueueModule } from 'src/engine/core-modules/message-queue/messag
 import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
 import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permissions.module';
+import { BillingSubscriptionPhaseService } from 'src/engine/core-modules/billing/services/billing-subscription-phase.service';
+import { BillingPriceService } from 'src/engine/core-modules/billing/services/billing-price.service';
 
 @Module({
   imports: [
@@ -49,46 +43,37 @@ import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permi
     DomainManagerModule,
     MessageQueueModule,
     PermissionsModule,
-    TypeOrmModule.forFeature(
-      [
-        BillingSubscription,
-        BillingSubscriptionItem,
-        BillingCustomer,
-        BillingProduct,
-        BillingPrice,
-        BillingMeter,
-        BillingEntitlement,
-        Workspace,
-        UserWorkspace,
-        FeatureFlag,
-      ],
-      'core',
-    ),
+    AiModule,
+    TypeOrmModule.forFeature([
+      BillingSubscription,
+      BillingSubscriptionItem,
+      BillingCustomer,
+      BillingProduct,
+      BillingPrice,
+      BillingMeter,
+      BillingEntitlement,
+      Workspace,
+      UserWorkspace,
+      FeatureFlag,
+    ]),
   ],
-  controllers: [BillingController],
   providers: [
     BillingSubscriptionService,
     BillingSubscriptionItemService,
-    BillingWebhookSubscriptionService,
-    BillingWebhookEntitlementService,
     BillingPortalWorkspaceService,
     BillingProductService,
+    BillingSubscriptionPhaseService,
     BillingResolver,
     BillingPlanService,
     BillingWorkspaceMemberListener,
     BillingFeatureUsedListener,
     BillingService,
-    BillingWebhookProductService,
-    BillingWebhookPriceService,
-    BillingWebhookAlertService,
-    BillingWebhookInvoiceService,
-    BillingWebhookCustomerService,
     BillingRestApiExceptionFilter,
     BillingSyncCustomerDataCommand,
     BillingUpdateSubscriptionPriceCommand,
     BillingSyncPlansDataCommand,
-    BillingAddWorkflowSubscriptionItemCommand,
     BillingUsageService,
+    BillingPriceService,
   ],
   exports: [
     BillingSubscriptionService,

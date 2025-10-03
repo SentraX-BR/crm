@@ -1,16 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
-import crypto from 'node:crypto';
+import crypto, { randomUUID } from 'node:crypto';
 
-import { i18n } from '@lingui/core';
-import { t } from '@lingui/core/macro';
+import { msg, t } from '@lingui/core/macro';
 import { render } from '@react-email/render';
 import { addMilliseconds } from 'date-fns';
 import ms from 'ms';
 import { PasswordUpdateNotifyEmail } from 'twenty-emails';
-import { APP_LOCALES } from 'twenty-shared/translations';
-import { isDefined } from 'twenty-shared/utils';
+import { AppPath } from 'twenty-shared/types';
+import { assertIsDefinedOrThrow, isDefined } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';
 
 import { NodeEnvironment } from 'src/engine/core-modules/twenty-config/interfaces/node-environment.interface';
@@ -19,6 +18,7 @@ import {
   AppToken,
   AppTokenType,
 } from 'src/engine/core-modules/app-token/app-token.entity';
+import { AuditService } from 'src/engine/core-modules/audit/services/audit.service';
 import {
   AuthException,
   AuthExceptionCode,
@@ -28,36 +28,39 @@ import {
   compareHash,
   hashPassword,
 } from 'src/engine/core-modules/auth/auth.util';
-import { AuthorizeApp } from 'src/engine/core-modules/auth/dto/authorize-app.entity';
-import { AuthorizeAppInput } from 'src/engine/core-modules/auth/dto/authorize-app.input';
-import { GetLoginTokenFromCredentialsInput } from 'src/engine/core-modules/auth/dto/get-login-token-from-credentials.input';
-import { AuthTokens } from 'src/engine/core-modules/auth/dto/token.entity';
-import { UpdatePassword } from 'src/engine/core-modules/auth/dto/update-password.entity';
-import {
-  UserExists,
-  UserNotExists,
-} from 'src/engine/core-modules/auth/dto/user-exists.entity';
-import { WorkspaceInviteHashValid } from 'src/engine/core-modules/auth/dto/workspace-invite-hash-valid.entity';
+import { type AuthorizeApp } from 'src/engine/core-modules/auth/dto/authorize-app.entity';
+import { type AuthorizeAppInput } from 'src/engine/core-modules/auth/dto/authorize-app.input';
+import { type AuthTokens } from 'src/engine/core-modules/auth/dto/token.entity';
+import { type UpdatePassword } from 'src/engine/core-modules/auth/dto/update-password.entity';
+import { type UserCredentialsInput } from 'src/engine/core-modules/auth/dto/user-credentials.input';
+import { type CheckUserExistOutput } from 'src/engine/core-modules/auth/dto/user-exists.entity';
+import { type WorkspaceInviteHashValid } from 'src/engine/core-modules/auth/dto/workspace-invite-hash-valid.entity';
 import { AuthSsoService } from 'src/engine/core-modules/auth/services/auth-sso.service';
 import { SignInUpService } from 'src/engine/core-modules/auth/services/sign-in-up.service';
+import { type GoogleRequest } from 'src/engine/core-modules/auth/strategies/google.auth.strategy';
+import { type MicrosoftRequest } from 'src/engine/core-modules/auth/strategies/microsoft.auth.strategy';
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
+import { LoginTokenService } from 'src/engine/core-modules/auth/token/services/login-token.service';
 import { RefreshTokenService } from 'src/engine/core-modules/auth/token/services/refresh-token.service';
+import { WorkspaceAgnosticTokenService } from 'src/engine/core-modules/auth/token/services/workspace-agnostic-token.service';
+import { JwtTokenTypeEnum } from 'src/engine/core-modules/auth/types/auth-context.type';
 import {
-  AuthProviderWithPasswordType,
-  ExistingUserOrNewUser,
-  SignInUpBaseParams,
-  SignInUpNewUserPayload,
+  type AuthProviderWithPasswordType,
+  type ExistingUserOrNewUser,
+  type SignInUpBaseParams,
+  type SignInUpNewUserPayload,
 } from 'src/engine/core-modules/auth/types/signInUp.type';
-import { WorkspaceSubdomainCustomDomainAndIsCustomDomainEnabledType } from 'src/engine/core-modules/domain-manager/domain-manager.type';
+import { type WorkspaceSubdomainCustomDomainAndIsCustomDomainEnabledType } from 'src/engine/core-modules/domain-manager/domain-manager.type';
 import { DomainManagerService } from 'src/engine/core-modules/domain-manager/services/domain-manager.service';
 import { EmailService } from 'src/engine/core-modules/email/email.service';
+import { GuardRedirectService } from 'src/engine/core-modules/guard-redirect/services/guard-redirect.service';
+import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
 import { UserService } from 'src/engine/core-modules/user/services/user.service';
 import { User } from 'src/engine/core-modules/user/user.entity';
-import { userValidator } from 'src/engine/core-modules/user/user.validate';
 import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-invitation/services/workspace-invitation.service';
-import { WorkspaceAuthProvider } from 'src/engine/core-modules/workspace/types/workspace.type';
+import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
 import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
 import { workspaceValidator } from 'src/engine/core-modules/workspace/workspace.validate';
 
@@ -66,21 +69,26 @@ import { workspaceValidator } from 'src/engine/core-modules/workspace/workspace.
 export class AuthService {
   constructor(
     private readonly accessTokenService: AccessTokenService,
+    private readonly workspaceAgnosticTokenService: WorkspaceAgnosticTokenService,
     private readonly domainManagerService: DomainManagerService,
     private readonly refreshTokenService: RefreshTokenService,
+    private readonly loginTokenService: LoginTokenService,
+    private readonly guardRedirectService: GuardRedirectService,
     private readonly userWorkspaceService: UserWorkspaceService,
     private readonly workspaceInvitationService: WorkspaceInvitationService,
     private readonly authSsoService: AuthSsoService,
     private readonly userService: UserService,
     private readonly signInUpService: SignInUpService,
-    @InjectRepository(Workspace, 'core')
+    @InjectRepository(Workspace)
     private readonly workspaceRepository: Repository<Workspace>,
-    @InjectRepository(User, 'core')
+    @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly twentyConfigService: TwentyConfigService,
     private readonly emailService: EmailService,
-    @InjectRepository(AppToken, 'core')
+    @InjectRepository(AppToken)
     private readonly appTokenRepository: Repository<AppToken>,
+    private readonly i18nService: I18nService,
+    private readonly auditService: AuditService,
   ) {}
 
   private async checkAccessAndUseInvitationOrThrow(
@@ -121,11 +129,11 @@ export class AuthService {
     );
   }
 
-  async getLoginTokenFromCredentials(
-    input: GetLoginTokenFromCredentialsInput,
-    targetWorkspace: Workspace,
+  async validateLoginWithPassword(
+    input: UserCredentialsInput,
+    targetWorkspace?: Workspace,
   ) {
-    if (!targetWorkspace.isPasswordAuthEnabled) {
+    if (targetWorkspace && !targetWorkspace.isPasswordAuthEnabled) {
       throw new AuthException(
         'Email/Password auth is not enabled for this workspace',
         AuthExceptionCode.FORBIDDEN_EXCEPTION,
@@ -136,7 +144,7 @@ export class AuthService {
       where: {
         email: input.email,
       },
-      relations: ['workspaces'],
+      relations: { userWorkspaces: true },
     });
 
     if (!user) {
@@ -146,12 +154,17 @@ export class AuthService {
       );
     }
 
-    await this.checkAccessAndUseInvitationOrThrow(targetWorkspace, user);
+    if (targetWorkspace) {
+      await this.checkAccessAndUseInvitationOrThrow(targetWorkspace, user);
+    }
 
     if (!user.passwordHash) {
       throw new AuthException(
         'Incorrect login method',
         AuthExceptionCode.INVALID_INPUT,
+        {
+          userFriendlyMessage: t`User was not created with email/password`,
+        },
       );
     }
 
@@ -161,28 +174,35 @@ export class AuthService {
       throw new AuthException(
         'Wrong password',
         AuthExceptionCode.FORBIDDEN_EXCEPTION,
+        {
+          userFriendlyMessage: t`Wrong password`,
+        },
       );
     }
 
+    await this.checkIsEmailVerified(user.isEmailVerified);
+
+    return user;
+  }
+
+  async checkIsEmailVerified(isEmailVerified: boolean) {
     const isEmailVerificationRequired = this.twentyConfigService.get(
       'IS_EMAIL_VERIFICATION_REQUIRED',
     );
 
-    if (isEmailVerificationRequired && !user.isEmailVerified) {
+    if (isEmailVerificationRequired && !isEmailVerified) {
       throw new AuthException(
         'Email is not verified',
         AuthExceptionCode.EMAIL_NOT_VERIFIED,
       );
     }
-
-    return user;
   }
 
   private async validatePassword(
     userData: ExistingUserOrNewUser['userData'],
     authParams: Extract<
       AuthProviderWithPasswordType['authParams'],
-      { provider: 'password' }
+      { provider: AuthProviderEnum.Password }
     >,
   ) {
     if (userData.type === 'newUser') {
@@ -203,7 +223,7 @@ export class AuthService {
     authParams: AuthProviderWithPasswordType['authParams'],
     workspace: Workspace | undefined | null,
   ) {
-    if (authParams.provider === 'password') {
+    if (authParams.provider === AuthProviderEnum.Password) {
       await this.validatePassword(userData, authParams);
     }
 
@@ -225,7 +245,7 @@ export class AuthService {
 
     if (params.userData.type === 'newUser') {
       const partialUserWithPicture =
-        await this.signInUpService.computeParamsForNewUser(
+        await this.signInUpService.computePartialUserFromUserPayload(
           params.userData.newUserPayload,
           params.authParams,
         );
@@ -248,7 +268,11 @@ export class AuthService {
     });
   }
 
-  async verify(email: string, workspaceId: string): Promise<AuthTokens> {
+  async verify(
+    email: string,
+    workspaceId: string,
+    authProvider: AuthProviderEnum,
+  ): Promise<AuthTokens> {
     if (!email) {
       throw new AuthException(
         'Email is required',
@@ -260,7 +284,7 @@ export class AuthService {
       where: { email },
     });
 
-    userValidator.assertIsDefinedOrThrow(
+    assertIsDefinedOrThrow(
       user,
       new AuthException('User not found', AuthExceptionCode.USER_NOT_FOUND),
     );
@@ -268,38 +292,104 @@ export class AuthService {
     // passwordHash is hidden for security reasons
     user.passwordHash = '';
 
-    const accessToken = await this.accessTokenService.generateAccessToken(
-      user.id,
+    const accessToken = await this.accessTokenService.generateAccessToken({
+      userId: user.id,
       workspaceId,
-    );
-    const refreshToken = await this.refreshTokenService.generateRefreshToken(
-      user.id,
+      authProvider,
+    });
+    const refreshToken = await this.refreshTokenService.generateRefreshToken({
+      userId: user.id,
       workspaceId,
-    );
+      authProvider,
+      targetedTokenType: JwtTokenTypeEnum.ACCESS,
+    });
 
     return {
       tokens: {
-        accessToken,
+        accessOrWorkspaceAgnosticToken: accessToken,
         refreshToken,
       },
     };
   }
 
-  async checkUserExists(email: string): Promise<UserExists | UserNotExists> {
+  async generateImpersonationAccessTokenAndRefreshToken({
+    workspaceId,
+    impersonatorUserWorkspaceId,
+    impersonatedUserWorkspaceId,
+    impersonatorUserId,
+    impersonatedUserId,
+  }: {
+    workspaceId: string;
+    impersonatorUserWorkspaceId: string;
+    impersonatedUserWorkspaceId: string;
+    impersonatorUserId: string;
+    impersonatedUserId: string;
+  }): Promise<AuthTokens> {
+    const correlationId = randomUUID();
+
+    const analytics = this.auditService.createContext({
+      workspaceId,
+      userId: impersonatorUserId,
+    });
+
+    await analytics.insertWorkspaceEvent('Monitoring', {
+      eventName: 'workspace.impersonation.attempted',
+      message: `correlationId=${correlationId}; impersonatorUserWorkspaceId=${impersonatorUserWorkspaceId}; targetUserWorkspaceId=${impersonatedUserWorkspaceId}; workspaceId=${workspaceId}`,
+    });
+
+    const accessToken = await this.accessTokenService.generateAccessToken({
+      userId: impersonatedUserId,
+      workspaceId,
+      authProvider: AuthProviderEnum.Impersonation,
+      isImpersonating: true,
+      impersonatorUserWorkspaceId,
+      impersonatedUserWorkspaceId,
+    });
+    const refreshToken = await this.refreshTokenService.generateRefreshToken(
+      {
+        userId: impersonatedUserId,
+        workspaceId,
+        authProvider: AuthProviderEnum.Impersonation,
+        targetedTokenType: JwtTokenTypeEnum.ACCESS,
+        isImpersonating: true,
+        impersonatorUserWorkspaceId,
+        impersonatedUserWorkspaceId,
+      },
+      true,
+    );
+
+    await analytics.insertWorkspaceEvent('Monitoring', {
+      eventName: 'workspace.impersonation.issued',
+      message: `correlationId=${correlationId}; impersonatorUserWorkspaceId=${impersonatorUserWorkspaceId}; targetUserWorkspaceId=${impersonatedUserWorkspaceId}; workspaceId=${workspaceId}`,
+    });
+
+    return {
+      tokens: {
+        accessOrWorkspaceAgnosticToken: accessToken,
+        refreshToken,
+      },
+    };
+  }
+
+  async countAvailableWorkspacesByEmail(email: string): Promise<number> {
+    return Object.values(
+      await this.userWorkspaceService.findAvailableWorkspacesByEmail(email),
+    ).flat(2).length;
+  }
+
+  async checkUserExists(email: string): Promise<CheckUserExistOutput> {
     const user = await this.userRepository.findOneBy({
       email,
     });
 
-    if (userValidator.isDefined(user)) {
-      return {
-        exists: true,
-        availableWorkspaces:
-          await this.userWorkspaceService.findAvailableWorkspacesByEmail(email),
-        isEmailVerified: user.isEmailVerified,
-      };
-    }
+    const isUserExist = isDefined(user);
 
-    return { exists: false };
+    return {
+      exists: isUserExist,
+      availableWorkspacesCount:
+        await this.countAvailableWorkspacesByEmail(email),
+      isEmailVerified: isUserExist ? user.isEmailVerified : false,
+    };
   }
 
   async checkWorkspaceInviteHashIsValid(
@@ -402,7 +492,6 @@ export class AuthService {
   async updatePassword(
     userId: string,
     newPassword: string,
-    locale: keyof typeof APP_LOCALES,
   ): Promise<UpdatePassword> {
     if (!userId) {
       throw new AuthException(
@@ -411,12 +500,24 @@ export class AuthService {
       );
     }
 
-    const user = await this.userRepository.findOneBy({ id: userId });
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { userWorkspaces: true },
+    });
 
     if (!user) {
       throw new AuthException(
         'User not found',
         AuthExceptionCode.USER_NOT_FOUND,
+      );
+    }
+
+    const [firstUserWorkspace] = user.userWorkspaces;
+
+    if (!firstUserWorkspace) {
+      throw new AuthException(
+        'User does not have a workspace',
+        AuthExceptionCode.USER_WORKSPACE_NOT_FOUND,
       );
     }
 
@@ -439,20 +540,22 @@ export class AuthService {
       userName: `${user.firstName} ${user.lastName}`,
       email: user.email,
       link: this.domainManagerService.getBaseUrl().toString(),
-      locale,
+      locale: firstUserWorkspace.locale,
     });
 
     const html = await render(emailTemplate, { pretty: true });
     const text = await render(emailTemplate, { plainText: true });
 
-    i18n.activate(locale);
+    const passwordChangedMsg = msg`Your Password Has Been Successfully Changed`;
+    const i18n = this.i18nService.getI18nInstance(firstUserWorkspace.locale);
+    const subject = i18n._(passwordChangedMsg);
 
-    this.emailService.send({
+    await this.emailService.send({
       from: `${this.twentyConfigService.get(
         'EMAIL_FROM_NAME',
       )} <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
       to: user.email,
-      subject: t`Your Password Has Been Successfully Changed`,
+      subject,
       text,
       html,
     });
@@ -488,7 +591,7 @@ export class AuthService {
   }) {
     const url = this.domainManagerService.buildWorkspaceURL({
       workspace,
-      pathname: '/verify',
+      pathname: AppPath.Verify,
       searchParams: {
         loginToken,
         ...(billingCheckoutSessionState ? { billingCheckoutSessionState } : {}),
@@ -533,10 +636,10 @@ export class AuthService {
       workspaceInviteHash?: string;
     } & (
       | {
-          authProvider: Exclude<WorkspaceAuthProvider, 'password'>;
+          authProvider: Exclude<AuthProviderEnum, AuthProviderEnum.Password>;
           email: string;
         }
-      | { authProvider: Extract<WorkspaceAuthProvider, 'password'> }
+      | { authProvider: Extract<AuthProviderEnum, AuthProviderEnum.Password> }
     ),
   ) {
     if (params.workspaceInviteHash) {
@@ -550,7 +653,7 @@ export class AuthService {
       );
     }
 
-    if (params.authProvider !== 'password') {
+    if (params.authProvider !== AuthProviderEnum.Password) {
       return (
         (await this.authSsoService.findWorkspaceFromWorkspaceIdOrAuthProvider(
           {
@@ -646,7 +749,150 @@ export class AuthService {
       throw new AuthException(
         'User does not have access to this workspace',
         AuthExceptionCode.FORBIDDEN_EXCEPTION,
+        {
+          userFriendlyMessage: t`User does not have access to this workspace`,
+        },
       );
+    }
+  }
+
+  async signInUpWithSocialSSO(
+    {
+      firstName,
+      lastName,
+      email: rawEmail,
+      picture,
+      workspaceInviteHash,
+      workspaceId,
+      billingCheckoutSessionState,
+      action,
+      locale,
+    }: MicrosoftRequest['user'] | GoogleRequest['user'],
+    authProvider: AuthProviderEnum.Google | AuthProviderEnum.Microsoft,
+  ): Promise<string> {
+    const email = rawEmail.toLowerCase();
+
+    const availableWorkspacesCount =
+      action === 'list-available-workspaces'
+        ? await this.countAvailableWorkspacesByEmail(email)
+        : 0;
+
+    const existingUser = await this.userRepository.findOne({
+      where: { email },
+    });
+
+    if (
+      !workspaceId &&
+      !workspaceInviteHash &&
+      action === 'list-available-workspaces' &&
+      availableWorkspacesCount > 1
+    ) {
+      const user =
+        existingUser ??
+        (await this.signInUpService.signUpWithoutWorkspace(
+          {
+            firstName,
+            lastName,
+            email,
+            picture,
+            isEmailAlreadyVerified: true,
+          },
+          {
+            provider: authProvider,
+          },
+        ));
+
+      const url = this.domainManagerService.buildBaseUrl({
+        pathname: AppPath.SignInUp,
+        searchParams: {
+          tokenPair: JSON.stringify({
+            accessOrWorkspaceAgnosticToken:
+              await this.workspaceAgnosticTokenService.generateWorkspaceAgnosticToken(
+                {
+                  userId: user.id,
+                  authProvider,
+                },
+              ),
+            refreshToken: await this.refreshTokenService.generateRefreshToken({
+              userId: user.id,
+              authProvider,
+              targetedTokenType: JwtTokenTypeEnum.WORKSPACE_AGNOSTIC,
+            }),
+          }),
+        },
+      });
+
+      return url.toString();
+    }
+
+    const currentWorkspace =
+      action === 'create-new-workspace'
+        ? undefined
+        : await this.findWorkspaceForSignInUp({
+            workspaceId,
+            workspaceInviteHash,
+            email,
+            authProvider,
+          });
+
+    try {
+      const invitation =
+        currentWorkspace && email
+          ? await this.findInvitationForSignInUp({
+              currentWorkspace,
+              email,
+            })
+          : undefined;
+
+      const { userData } = this.formatUserDataPayload(
+        {
+          firstName,
+          lastName,
+          email,
+          picture,
+          locale,
+          isEmailAlreadyVerified: true,
+        },
+        existingUser,
+      );
+
+      await this.checkAccessForSignIn({
+        userData,
+        invitation,
+        workspaceInviteHash,
+        workspace: currentWorkspace,
+      });
+
+      const { user, workspace } = await this.signInUp({
+        invitation,
+        workspace: currentWorkspace,
+        userData,
+        authParams: {
+          provider: authProvider,
+        },
+        billingCheckoutSessionState,
+      });
+
+      const loginToken = await this.loginTokenService.generateLoginToken(
+        user.email,
+        workspace.id,
+        authProvider,
+      );
+
+      return this.computeRedirectURI({
+        loginToken: loginToken.token,
+        workspace,
+        billingCheckoutSessionState,
+      });
+    } catch (error) {
+      return this.guardRedirectService.getRedirectErrorUrlAndCaptureExceptions({
+        error,
+        workspace:
+          this.domainManagerService.getSubdomainAndCustomDomainFromWorkspaceFallbackOnDefaultSubdomain(
+            currentWorkspace,
+          ),
+        pathname: AppPath.Verify,
+      });
     }
   }
 }

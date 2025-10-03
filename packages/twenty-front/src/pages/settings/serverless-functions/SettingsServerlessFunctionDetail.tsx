@@ -7,27 +7,28 @@ import { useGetOneServerlessFunctionSourceCode } from '@/settings/serverless-fun
 import { usePublishOneServerlessFunction } from '@/settings/serverless-functions/hooks/usePublishOneServerlessFunction';
 import { useServerlessFunctionUpdateFormState } from '@/settings/serverless-functions/hooks/useServerlessFunctionUpdateFormState';
 import { useUpdateOneServerlessFunction } from '@/settings/serverless-functions/hooks/useUpdateOneServerlessFunction';
-import { SettingsPath } from '@/types/SettingsPath';
-import { SnackBarVariant } from '@/ui/feedback/snack-bar-manager/components/SnackBar';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
 import { TabList } from '@/ui/layout/tab-list/components/TabList';
 import { activeTabIdComponentState } from '@/ui/layout/tab-list/states/activeTabIdComponentState';
-import { useRecoilComponentStateV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentStateV2';
+import { useRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentState';
+import { ApolloError } from '@apollo/client';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { isDefined } from 'twenty-shared/utils';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath, isDefined } from 'twenty-shared/utils';
 import { IconCode, IconSettings, IconTestPipe } from 'twenty-ui/display';
 import { useDebouncedCallback } from 'use-debounce';
+import { getErrorMessageFromApolloError } from '~/utils/get-error-message-from-apollo-error.util';
 import { isDeeplyEqual } from '~/utils/isDeeplyEqual';
-import { getSettingsPath } from '~/utils/navigation/getSettingsPath';
+import { SOURCE_FOLDER_NAME } from '@/serverless-functions/constants/SourceFolderName';
 
 const SERVERLESS_FUNCTION_DETAIL_ID = 'serverless-function-detail';
 
 export const SettingsServerlessFunctionDetail = () => {
   const { serverlessFunctionId = '' } = useParams();
-  const { enqueueSnackBar } = useSnackBar();
-  const [activeTabId, setActiveTabId] = useRecoilComponentStateV2(
+  const { enqueueErrorSnackBar, enqueueSuccessSnackBar } = useSnackBar();
+  const [activeTabId, setActiveTabId] = useRecoilComponentState(
     activeTabIdComponentState,
     SERVERLESS_FUNCTION_DETAIL_ID,
   );
@@ -88,12 +89,9 @@ export const SettingsServerlessFunctionDetail = () => {
       }));
       await handleSave();
     } catch (err) {
-      enqueueSnackBar(
-        (err as Error)?.message || 'An error occurred while reset function',
-        {
-          variant: SnackBarVariant.Error,
-        },
-      );
+      enqueueErrorSnackBar({
+        apolloError: err instanceof ApolloError ? err : undefined,
+      });
     }
   };
 
@@ -102,17 +100,16 @@ export const SettingsServerlessFunctionDetail = () => {
       await publishOneServerlessFunction({
         id: serverlessFunctionId,
       });
-      enqueueSnackBar(`New function version has been published`, {
-        variant: SnackBarVariant.Success,
+      enqueueSuccessSnackBar({
+        message: `New function version has been published`,
       });
     } catch (err) {
-      enqueueSnackBar(
-        (err as Error)?.message ||
-          'An error occurred while publishing new version',
-        {
-          variant: SnackBarVariant.Error,
-        },
-      );
+      enqueueErrorSnackBar({
+        message:
+          err instanceof ApolloError
+            ? getErrorMessageFromApolloError(err)
+            : 'An error occurred while publishing new version',
+      });
     }
   };
 
@@ -128,15 +125,20 @@ export const SettingsServerlessFunctionDetail = () => {
   ];
 
   const files = formValues.code
-    ? Object.keys(formValues.code)
-        .map((key) => {
+    ? [
+        {
+          path: '.env',
+          language: 'ini',
+          content: formValues.code?.['.env'] || '',
+        },
+        ...Object.keys(formValues.code?.[SOURCE_FOLDER_NAME]).map((key) => {
           return {
             path: key,
-            language: key === '.env' ? 'ini' : 'typescript',
-            content: formValues.code?.[key] || '',
+            language: 'typescript',
+            content: formValues.code?.[SOURCE_FOLDER_NAME]?.[key] || '',
           };
-        })
-        .reverse()
+        }),
+      ].reverse()
     : [];
 
   const renderActiveTabContent = () => {

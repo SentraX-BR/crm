@@ -1,17 +1,21 @@
 import { SettingsListCard } from '@/settings/components/SettingsListCard';
-import { SettingsPath } from '@/types/SettingsPath';
 import { useTheme } from '@emotion/react';
-import { HealthIndicatorId, SystemHealthService } from '~/generated/graphql';
-import { getSettingsPath } from '~/utils/navigation/getSettingsPath';
-import { SettingsAdminHealthStatusRightContainer } from './SettingsAdminHealthStatusRightContainer';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
 import {
   IconAppWindow,
-  IconComponent,
+  type IconComponent,
   IconDatabase,
   IconServer2,
   IconTool,
   IconUserCircle,
 } from 'twenty-ui/display';
+import {
+  HealthIndicatorId,
+  type SystemHealthService,
+} from '~/generated-metadata/graphql';
+
+import { SettingsAdminHealthStatusRightContainer } from './SettingsAdminHealthStatusRightContainer';
 
 const HealthStatusIcons: { [k in HealthIndicatorId]: IconComponent } = {
   [HealthIndicatorId.database]: IconDatabase,

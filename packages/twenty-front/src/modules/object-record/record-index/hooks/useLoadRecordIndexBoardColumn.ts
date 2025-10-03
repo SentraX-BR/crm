@@ -8,17 +8,21 @@ import { useSetRecordIdsForColumn } from '@/object-record/record-board/hooks/use
 import { currentRecordFilterGroupsComponentState } from '@/object-record/record-filter-group/states/currentRecordFilterGroupsComponentState';
 import { useFilterValueDependencies } from '@/object-record/record-filter/hooks/useFilterValueDependencies';
 import { currentRecordFiltersComponentState } from '@/object-record/record-filter/states/currentRecordFiltersComponentState';
-import { computeRecordGqlOperationFilter } from '@/object-record/record-filter/utils/computeRecordGqlOperationFilter';
 import { recordGroupDefinitionFamilyState } from '@/object-record/record-group/states/recordGroupDefinitionFamilyState';
 import { useRecordBoardRecordGqlFields } from '@/object-record/record-index/hooks/useRecordBoardRecordGqlFields';
 
-import { FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 import { currentRecordSortsComponentState } from '@/object-record/record-sort/states/currentRecordSortsComponentState';
 
-import { combineFilters } from '@/object-record/record-filter/utils/combineFilters';
+import { anyFieldFilterValueComponentState } from '@/object-record/record-filter/states/anyFieldFilterValueComponentState';
 import { useUpsertRecordsInStore } from '@/object-record/record-store/hooks/useUpsertRecordsInStore';
-import { useRecoilComponentValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValueV2';
-import { isDefined } from 'twenty-shared/utils';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import {
+  combineFilters,
+  computeRecordGqlOperationFilter,
+  isDefined,
+  turnAnyFieldFilterIntoRecordGqlFilter,
+} from 'twenty-shared/utils';
 
 type UseLoadRecordIndexBoardProps = {
   objectNameSingular: string;
@@ -43,15 +47,15 @@ export const useLoadRecordIndexBoardColumn = ({
     recordGroupDefinitionFamilyState(columnId),
   );
 
-  const currentRecordFilterGroups = useRecoilComponentValueV2(
+  const currentRecordFilterGroups = useRecoilComponentValue(
     currentRecordFilterGroupsComponentState,
   );
 
-  const currentRecordFilters = useRecoilComponentValueV2(
+  const currentRecordFilters = useRecoilComponentValue(
     currentRecordFiltersComponentState,
   );
 
-  const currentRecordSorts = useRecoilComponentValueV2(
+  const currentRecordSorts = useRecoilComponentValue(
     currentRecordSortsComponentState,
   );
 
@@ -63,6 +67,16 @@ export const useLoadRecordIndexBoardColumn = ({
     recordFilterGroups: currentRecordFilterGroups,
     fields: objectMetadataItem.fields,
   });
+
+  const anyFieldFilterValue = useRecoilComponentValue(
+    anyFieldFilterValueComponentState,
+  );
+
+  const { recordGqlOperationFilter: anyFieldFilter } =
+    turnAnyFieldFilterIntoRecordGqlFilter({
+      fields: objectMetadataItem.fields,
+      filterValue: anyFieldFilterValue,
+    });
 
   const orderBy = turnSortsIntoOrderBy(objectMetadataItem, currentRecordSorts);
 
@@ -78,25 +92,21 @@ export const useLoadRecordIndexBoardColumn = ({
     : { is: 'NULL' };
 
   const combinedFilters = combineFilters([
+    anyFieldFilter,
     requestFilters,
     {
       [kanbanFieldMetadataItem.name]: recordIndexKanbanFieldMetadataFilterValue,
     },
   ]);
 
-  const {
-    records,
-    loading,
-    fetchMoreRecords,
-    queryStateIdentifier,
-    hasNextPage,
-  } = useFindManyRecords({
-    objectNameSingular,
-    filter: combinedFilters,
-    orderBy,
-    recordGqlFields,
-    limit: 10,
-  });
+  const { records, loading, fetchMoreRecords, queryIdentifier, hasNextPage } =
+    useFindManyRecords({
+      objectNameSingular,
+      filter: combinedFilters,
+      orderBy,
+      recordGqlFields,
+      limit: 10,
+    });
 
   useEffect(() => {
     setRecordIdsForColumn(columnId, records);
@@ -110,7 +120,7 @@ export const useLoadRecordIndexBoardColumn = ({
     records,
     loading,
     fetchMoreRecords,
-    queryStateIdentifier,
+    queryIdentifier,
     hasNextPage,
   };
 };

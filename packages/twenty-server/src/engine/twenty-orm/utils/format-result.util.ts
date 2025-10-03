@@ -4,24 +4,22 @@ import { isNonEmptyString } from '@sniptt/guards';
 import { FieldMetadataType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import { FieldMetadataInterface } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata.interface';
-
 import { compositeTypeDefinitions } from 'src/engine/metadata-modules/field-metadata/composite-types';
+import { type FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { computeCompositeColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-column-name.util';
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
+import { type ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
+import { type ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
 import { getCompositeFieldMetadataCollection } from 'src/engine/twenty-orm/utils/get-composite-field-metadata-collection';
-import { isFieldMetadataInterfaceOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
+import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
 import { isDate } from 'src/utils/date/isDate';
 import { isValidDate } from 'src/utils/date/isValidDate';
-
 export function formatResult<T>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any,
   objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps | undefined,
   objectMetadataMaps: ObjectMetadataMaps,
 ): T {
-  if (!data) {
+  if (!isDefined(data)) {
     return data;
   }
 
@@ -44,21 +42,18 @@ export function formatResult<T>(
   );
 
   const newData: object = {};
-  const objectMetadaItemFieldsByName =
-    objectMetadataMaps.byId[objectMetadataItemWithFieldMaps.id]?.fieldsByName;
 
   for (const [key, value] of Object.entries(data)) {
     const compositePropertyArgs = compositeFieldMetadataMap.get(key);
 
-    const fieldMetadata = objectMetadataItemWithFieldMaps.fieldsByName[key] as
-      | FieldMetadataInterface<FieldMetadataType>
-      | undefined;
+    const fieldMetadataId = objectMetadataItemWithFieldMaps.fieldIdByName[key];
+
+    const fieldMetadata = objectMetadataItemWithFieldMaps.fieldsById[
+      fieldMetadataId
+    ] as FieldMetadataEntity<FieldMetadataType> | undefined;
 
     const isRelation = fieldMetadata
-      ? isFieldMetadataInterfaceOfType(
-          fieldMetadata,
-          FieldMetadataType.RELATION,
-        )
+      ? isFieldMetadataEntityOfType(fieldMetadata, FieldMetadataType.RELATION)
       : false;
 
     if (!compositePropertyArgs && !isRelation) {
@@ -69,12 +64,9 @@ export function formatResult<T>(
           objectMetadataItemWithFieldMaps,
           objectMetadataMaps,
         );
-      } else if (objectMetadaItemFieldsByName[key]) {
+      } else if (fieldMetadata) {
         // @ts-expect-error legacy noImplicitAny
-        newData[key] = formatFieldMetadataValue(
-          value,
-          objectMetadaItemFieldsByName[key],
-        );
+        newData[key] = formatFieldMetadataValue(value, fieldMetadata);
       } else {
         // @ts-expect-error legacy noImplicitAny
         newData[key] = value;
@@ -123,20 +115,17 @@ export function formatResult<T>(
     newData[parentField][compositeProperty.name] = value;
   }
 
-  const dateFieldMetadataCollection =
-    objectMetadataItemWithFieldMaps.fields.filter(
-      (field) => field.type === FieldMetadataType.DATE,
-    );
+  const dateFieldMetadataCollection = Object.values(
+    objectMetadataItemWithFieldMaps.fieldsById,
+  ).filter((field) => field.type === FieldMetadataType.DATE);
 
   // This is a temporary fix to handle a bug in the frontend where the date gets returned in the wrong timezone,
   //   thus returning the wrong date.
-  //
   // In short, for example :
   //   - DB stores `2025-01-01`
   //   - TypeORM .returning() returns `2024-12-31T23:00:00.000Z`
   //   - we shift +1h (or whatever the timezone offset is on the server)
   //   - we return `2025-01-01T00:00:00.000Z`
-  //
   // See this PR for more details: https://github.com/twentyhq/twenty/pull/9700
   const serverOffsetInMillisecondsToCounterActTypeORMAutomaticTimezoneShift =
     new Date().getTimezoneOffset() * 60 * 1000;
@@ -208,7 +197,7 @@ export function getCompositeFieldMetadataMap(
 function formatFieldMetadataValue(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any,
-  fieldMetadata: FieldMetadataInterface,
+  fieldMetadata: FieldMetadataEntity,
 ) {
   if (
     typeof value === 'string' &&

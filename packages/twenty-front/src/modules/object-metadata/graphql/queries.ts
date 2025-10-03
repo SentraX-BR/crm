@@ -6,7 +6,6 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
       edges {
         node {
           id
-          dataSourceId
           nameSingular
           namePlural
           labelSingular
@@ -17,6 +16,7 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
           isRemote
           isActive
           isSystem
+          isUIReadOnly
           createdAt
           updatedAt
           labelIdentifierFieldMetadataId
@@ -25,28 +25,21 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
           isLabelSyncedWithName
           isSearchable
           duplicateCriteria
-          indexMetadatas(paging: { first: 100 }) {
-            edges {
-              node {
-                id
-                createdAt
-                updatedAt
-                name
-                indexWhereClause
-                indexType
-                isUnique
-                indexFieldMetadatas(paging: { first: 100 }) {
-                  edges {
-                    node {
-                      id
-                      createdAt
-                      updatedAt
-                      order
-                      fieldMetadataId
-                    }
-                  }
-                }
-              }
+          indexMetadataList {
+            id
+            createdAt
+            updatedAt
+            name
+            indexWhereClause
+            indexType
+            isUnique
+            isCustom
+            indexFieldMetadataList {
+              id
+              fieldMetadataId
+              createdAt
+              updatedAt
+              order
             }
           }
           fieldsList {
@@ -59,6 +52,7 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
             isCustom
             isActive
             isSystem
+            isUIReadOnly
             isNullable
             isUnique
             createdAt
@@ -67,10 +61,14 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
             options
             settings
             isLabelSyncedWithName
-            relationDefinition {
-              relationId
-              direction
+            relation {
+              type
               sourceObjectMetadata {
+                id
+                nameSingular
+                namePlural
+              }
+              targetObjectMetadata {
                 id
                 nameSingular
                 namePlural
@@ -79,10 +77,26 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
                 id
                 name
               }
+              targetFieldMetadata {
+                id
+                name
+              }
+            }
+            morphRelations {
+              type
+              sourceObjectMetadata {
+                id
+                nameSingular
+                namePlural
+              }
               targetObjectMetadata {
                 id
                 nameSingular
                 namePlural
+              }
+              sourceFieldMetadata {
+                id
+                name
               }
               targetFieldMetadata {
                 id

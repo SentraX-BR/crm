@@ -1,29 +1,29 @@
 import styled from '@emotion/styled';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
-import { useDropdown } from '@/ui/layout/dropdown/hooks/useDropdown';
 import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
-import { usePreviousHotkeyScope } from '@/ui/utilities/hotkey/hooks/usePreviousHotkeyScope';
 import { arrayToChunks } from '~/utils/array/arrayToChunks';
 
 import { ICON_PICKER_DROPDOWN_CONTENT_WIDTH } from '@/ui/input/components/constants/IconPickerDropdownContentWidth';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
-import { useSelectableListListenToEnterHotkeyOnItem } from '@/ui/layout/selectable-list/hooks/useSelectableListListenToEnterHotkeyOnItem';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { type DropdownOffset } from '@/ui/layout/dropdown/types/DropdownOffset';
+import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
-import { useRecoilComponentValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValueV2';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
 import { t } from '@lingui/core/macro';
-import { IconApps, IconComponent, useIcons } from 'twenty-ui/display';
+import { IconApps, type IconComponent, useIcons } from 'twenty-ui/display';
 import {
   IconButton,
-  IconButtonSize,
-  IconButtonVariant,
+  type IconButtonSize,
+  type IconButtonVariant,
   LightIconButton,
 } from 'twenty-ui/input';
-import { IconPickerHotkeyScope } from '../types/IconPickerHotkeyScope';
+
 export type IconPickerProps = {
   disabled?: boolean;
   dropdownId?: string;
@@ -35,6 +35,10 @@ export type IconPickerProps = {
   variant?: IconButtonVariant;
   className?: string;
   size?: IconButtonSize;
+  clickableComponent?: ReactNode;
+  dropdownWidth?: number;
+  dropdownOffset?: DropdownOffset;
+  maxIconsVisible?: number;
 };
 
 const StyledMenuIconItemsContainer = styled.div`
@@ -44,9 +48,25 @@ const StyledMenuIconItemsContainer = styled.div`
   gap: ${({ theme }) => theme.spacing(0.5)};
 `;
 
-const StyledLightIconButton = styled(LightIconButton)<{ isSelected?: boolean }>`
-  background: ${({ theme, isSelected }) =>
-    isSelected ? theme.background.transparent.medium : 'transparent'};
+const StyledLightIconButton = styled(LightIconButton)<{
+  isSelected?: boolean;
+  isFocused?: boolean;
+}>`
+  background: ${({ theme, isSelected, isFocused }) =>
+    isSelected
+      ? theme.background.transparent.medium
+      : isFocused
+        ? theme.background.transparent.light
+        : 'transparent'};
+`;
+
+const StyledMatrixItem = styled.div`
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 `;
 
 const convertIconKeyToLabel = (iconKey: string) =>
@@ -57,6 +77,7 @@ type IconPickerIconProps = {
   onClick: () => void;
   selectedIconKey?: string;
   Icon: IconComponent;
+  focusedIconKey?: string;
 };
 
 const IconPickerIcon = ({
@@ -64,28 +85,28 @@ const IconPickerIcon = ({
   onClick,
   selectedIconKey,
   Icon,
+  focusedIconKey,
 }: IconPickerIconProps) => {
-  const isSelectedItemId = useRecoilComponentValueV2(
+  const isSelectedItemId = useRecoilComponentValue(
     selectedItemIdComponentState,
     iconKey,
   );
 
-  useSelectableListListenToEnterHotkeyOnItem({
-    hotkeyScope: IconPickerHotkeyScope.IconPicker,
-    itemId: iconKey,
-    onEnter: onClick,
-  });
-
   return (
-    <StyledLightIconButton
-      key={iconKey}
-      aria-label={convertIconKeyToLabel(iconKey)}
-      size="medium"
-      title={iconKey}
-      isSelected={iconKey === selectedIconKey || !!isSelectedItemId}
-      Icon={Icon}
-      onClick={onClick}
-    />
+    <StyledMatrixItem>
+      <SelectableListItem itemId={iconKey} onEnter={onClick}>
+        <StyledLightIconButton
+          key={iconKey}
+          aria-label={convertIconKeyToLabel(iconKey)}
+          size="medium"
+          title={iconKey}
+          isSelected={iconKey === selectedIconKey || !!isSelectedItemId}
+          isFocused={iconKey === focusedIconKey}
+          Icon={Icon}
+          onClick={onClick}
+        />
+      </SelectableListItem>
+    </StyledMatrixItem>
   );
 };
 
@@ -100,32 +121,28 @@ export const IconPicker = ({
   variant = 'secondary',
   className,
   size = 'medium',
+  clickableComponent,
+  dropdownWidth,
+  dropdownOffset,
+  maxIconsVisible = 25,
 }: IconPickerProps) => {
   const [searchString, setSearchString] = useState('');
-  const {
-    goBackToPreviousHotkeyScope,
-    setHotkeyScopeAndMemorizePreviousScope,
-  } = usePreviousHotkeyScope();
 
   const [isMouseInsideIconList, setIsMouseInsideIconList] = useState(false);
 
   const handleMouseEnter = () => {
     if (!isMouseInsideIconList) {
       setIsMouseInsideIconList(true);
-      setHotkeyScopeAndMemorizePreviousScope({
-        scope: IconPickerHotkeyScope.IconPicker,
-      });
     }
   };
 
   const handleMouseLeave = () => {
     if (isMouseInsideIconList) {
       setIsMouseInsideIconList(false);
-      goBackToPreviousHotkeyScope();
     }
   };
 
-  const { closeDropdown } = useDropdown(dropdownId);
+  const { closeDropdown } = useCloseDropdown();
 
   const { getIcons, getIcon } = useIcons();
   const icons = getIcons();
@@ -169,9 +186,9 @@ export const IconPicker = ({
           ...filteredAndSortedIconKeys.filter(
             (iconKey) => iconKey !== selectedIconKey,
           ),
-        ].slice(0, 25)
-      : filteredAndSortedIconKeys.slice(0, 25);
-  }, [icons, searchString, selectedIconKey]);
+        ].slice(0, maxIconsVisible)
+      : filteredAndSortedIconKeys.slice(0, maxIconsVisible);
+  }, [icons, searchString, selectedIconKey, maxIconsVisible]);
 
   const iconKeys2d = useMemo(
     () => arrayToChunks(matchingSearchIconKeys.slice(), 5),
@@ -180,30 +197,42 @@ export const IconPicker = ({
 
   const icon = selectedIconKey ? getIcon(selectedIconKey) : IconApps;
 
+  const selectableListInstanceId = 'icon-list';
+
+  const focusedIconKey =
+    useRecoilComponentValue(
+      selectedItemIdComponentState,
+      selectableListInstanceId,
+    ) ?? undefined;
+
   return (
     <div className={className}>
       <Dropdown
         dropdownId={dropdownId}
-        dropdownHotkeyScope={{ scope: IconPickerHotkeyScope.IconPicker }}
+        dropdownOffset={dropdownOffset}
         clickableComponent={
-          <IconButton
-            ariaLabel={`Click to select icon ${
-              selectedIconKey
-                ? `(selected: ${selectedIconKey})`
-                : `(no icon selected)`
-            }`}
-            disabled={disabled}
-            Icon={icon}
-            variant={variant}
-            size={size}
-          />
+          clickableComponent || (
+            <IconButton
+              ariaLabel={`Click to select icon ${
+                selectedIconKey
+                  ? `(selected: ${selectedIconKey})`
+                  : `(no icon selected)`
+              }`}
+              disabled={disabled}
+              Icon={icon}
+              variant={variant}
+              size={size}
+            />
+          )
         }
         dropdownComponents={
-          <DropdownContent widthInPixels={ICON_PICKER_DROPDOWN_CONTENT_WIDTH}>
+          <DropdownContent
+            widthInPixels={dropdownWidth || ICON_PICKER_DROPDOWN_CONTENT_WIDTH}
+          >
             <SelectableList
-              selectableListInstanceId="icon-list"
+              selectableListInstanceId={selectableListInstanceId}
               selectableItemIdMatrix={iconKeys2d}
-              hotkeyScope={IconPickerHotkeyScope.IconPicker}
+              focusId={dropdownId}
             >
               <DropdownMenuSearchInput
                 placeholder={t`Search icon`}
@@ -225,10 +254,11 @@ export const IconPicker = ({
                         iconKey={iconKey}
                         onClick={() => {
                           onChange({ iconKey, Icon: getIcon(iconKey) });
-                          closeDropdown();
+                          closeDropdown(dropdownId);
                         }}
                         selectedIconKey={selectedIconKey}
                         Icon={getIcon(iconKey)}
+                        focusedIconKey={focusedIconKey}
                       />
                     ))}
                   </StyledMenuIconItemsContainer>

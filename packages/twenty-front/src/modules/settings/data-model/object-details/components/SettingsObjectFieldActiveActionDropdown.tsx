@@ -2,7 +2,8 @@ import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
-import { useDropdown } from '@/ui/layout/dropdown/hooks/useDropdown';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { isDefined } from 'twenty-shared/utils';
 import {
   IconArchive,
   IconDotsVertical,
@@ -18,7 +19,7 @@ type SettingsObjectFieldActiveActionDropdownProps = {
   onDeactivate?: () => void;
   onEdit: () => void;
   onSetAsLabelIdentifier?: () => void;
-  scopeKey: string;
+  fieldMetadataItemId: string;
 };
 
 export const SettingsObjectFieldActiveActionDropdown = ({
@@ -26,25 +27,25 @@ export const SettingsObjectFieldActiveActionDropdown = ({
   onDeactivate,
   onEdit,
   onSetAsLabelIdentifier,
-  scopeKey,
+  fieldMetadataItemId,
 }: SettingsObjectFieldActiveActionDropdownProps) => {
-  const dropdownId = `${scopeKey}-settings-field-active-action-dropdown`;
+  const dropdownId = `${fieldMetadataItemId}-settings-field-active-action-dropdown`;
 
-  const { closeDropdown } = useDropdown(dropdownId);
+  const { closeDropdown } = useCloseDropdown();
 
   const handleEdit = () => {
     onEdit();
-    closeDropdown();
+    closeDropdown(dropdownId);
   };
 
   const handleDeactivate = () => {
     onDeactivate?.();
-    closeDropdown();
+    closeDropdown(dropdownId);
   };
 
   const handleSetAsLabelIdentifier = () => {
     onSetAsLabelIdentifier?.();
-    closeDropdown();
+    closeDropdown(dropdownId);
   };
 
   return (
@@ -65,14 +66,14 @@ export const SettingsObjectFieldActiveActionDropdown = ({
               LeftIcon={isCustomField ? IconPencil : IconEye}
               onClick={handleEdit}
             />
-            {!!onSetAsLabelIdentifier && (
+            {isDefined(onSetAsLabelIdentifier) && (
               <MenuItem
                 text="Set as record text"
                 LeftIcon={IconTextSize}
                 onClick={handleSetAsLabelIdentifier}
               />
             )}
-            {!!onDeactivate && (
+            {isDefined(onDeactivate) && (
               <MenuItem
                 text="Deactivate"
                 LeftIcon={IconArchive}
@@ -82,7 +83,6 @@ export const SettingsObjectFieldActiveActionDropdown = ({
           </DropdownMenuItemsContainer>
         </DropdownContent>
       }
-      dropdownHotkeyScope={{ scope: dropdownId }}
     />
   );
 };

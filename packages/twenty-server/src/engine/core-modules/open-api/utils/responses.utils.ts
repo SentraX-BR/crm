@@ -1,6 +1,6 @@
 import { capitalize } from 'twenty-shared/utils';
 
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 
 export const getFindManyResponse200 = (
   item: Pick<ObjectMetadataEntity, 'nameSingular' | 'namePlural'>,
@@ -8,10 +8,7 @@ export const getFindManyResponse200 = (
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
-  )} for Response`;
-
-  const namePlural =
-    item.namePlural === 'relations' ? 'relationMetadata' : item.namePlural;
+  )}ForResponse`;
 
   return {
     description: 'Successful operation',
@@ -23,7 +20,7 @@ export const getFindManyResponse200 = (
             data: {
               type: 'object',
               properties: {
-                [namePlural]: {
+                [item.namePlural]: {
                   type: 'array',
                   items: {
                     $ref: schemaRef,
@@ -60,7 +57,7 @@ export const getFindManyResponse200 = (
 export const getFindOneResponse200 = (
   item: Pick<ObjectMetadataEntity, 'nameSingular'>,
 ) => {
-  const schemaRef = `#/components/schemas/${capitalize(item.nameSingular)} for Response`;
+  const schemaRef = `#/components/schemas/${capitalize(item.nameSingular)}ForResponse`;
 
   return {
     description: 'Successful operation',
@@ -90,10 +87,9 @@ export const getCreateOneResponse201 = (
 ) => {
   const one = fromMetadata ? 'One' : '';
 
-  const nameSingular =
-    item.nameSingular === 'relation' ? 'relationMetadata' : item.nameSingular;
-
-  const schemaRef = `#/components/schemas/${capitalize(nameSingular)} for Response`;
+  const schemaRef = `#/components/schemas/${capitalize(
+    item.nameSingular,
+  )}ForResponse`;
 
   return {
     description: 'Successful operation',
@@ -105,7 +101,7 @@ export const getCreateOneResponse201 = (
             data: {
               type: 'object',
               properties: {
-                [`create${one}${capitalize(nameSingular)}`]: {
+                [`create${one}${capitalize(item.nameSingular)}`]: {
                   $ref: schemaRef,
                 },
               },
@@ -122,7 +118,7 @@ export const getCreateManyResponse201 = (
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
-  )} for Response`;
+  )}ForResponse`;
 
   return {
     description: 'Successful operation',
@@ -154,7 +150,7 @@ export const getUpdateOneResponse200 = (
   fromMetadata = false,
 ) => {
   const one = fromMetadata ? 'One' : '';
-  const schemaRef = `#/components/schemas/${capitalize(item.nameSingular)} for Response`;
+  const schemaRef = `#/components/schemas/${capitalize(item.nameSingular)}ForResponse`;
 
   return {
     description: 'Successful operation',
@@ -243,8 +239,11 @@ export const getJsonResponse = () => {
             servers: {
               type: 'array',
               items: {
-                url: { type: 'string' },
-                description: { type: 'string' },
+                type: 'object',
+                properties: {
+                  url: { type: 'string' },
+                  description: { type: 'string' },
+                },
               },
             },
             components: {
@@ -273,7 +272,7 @@ export const getFindDuplicatesResponse200 = (
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
-  )} for Response`;
+  )}ForResponse`;
 
   return {
     description: 'Successful operation',

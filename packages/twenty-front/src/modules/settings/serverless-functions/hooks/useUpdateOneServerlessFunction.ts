@@ -1,18 +1,18 @@
-import { useApolloMetadataClient } from '@/object-metadata/hooks/useApolloMetadataClient';
+import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
 import { UPDATE_ONE_SERVERLESS_FUNCTION } from '@/settings/serverless-functions/graphql/mutations/updateOneServerlessFunction';
-import { useMutation } from '@apollo/client';
-import {
-  UpdateOneServerlessFunctionMutation,
-  UpdateOneServerlessFunctionMutationVariables,
-  UpdateServerlessFunctionInput,
-} from '~/generated-metadata/graphql';
-import { getOperationName } from '@apollo/client/utilities';
 import { FIND_ONE_SERVERLESS_FUNCTION_SOURCE_CODE } from '@/settings/serverless-functions/graphql/queries/findOneServerlessFunctionSourceCode';
+import { useMutation } from '@apollo/client';
+import { getOperationName } from '@apollo/client/utilities';
+import {
+  type UpdateOneServerlessFunctionMutation,
+  type UpdateOneServerlessFunctionMutationVariables,
+  type UpdateServerlessFunctionInputUpdates,
+} from '~/generated-metadata/graphql';
 
 export const useUpdateOneServerlessFunction = (
   serverlessFunctionId: string,
 ) => {
-  const apolloMetadataClient = useApolloMetadataClient();
+  const apolloMetadataClient = useApolloCoreClient();
   const [mutate] = useMutation<
     UpdateOneServerlessFunctionMutation,
     UpdateOneServerlessFunctionMutationVariables
@@ -21,11 +21,11 @@ export const useUpdateOneServerlessFunction = (
   });
 
   const updateOneServerlessFunction = async (
-    input: Omit<UpdateServerlessFunctionInput, 'id'>,
+    update: UpdateServerlessFunctionInputUpdates,
   ) => {
     return await mutate({
       variables: {
-        input: { ...input, id: serverlessFunctionId },
+        input: { update, id: serverlessFunctionId },
       },
       refetchQueries: [
         getOperationName(FIND_ONE_SERVERLESS_FUNCTION_SOURCE_CODE) ?? '',

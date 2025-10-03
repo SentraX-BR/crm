@@ -1,11 +1,12 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
-import { Repository } from 'typeorm';
+import { type Repository } from 'typeorm';
 
 import { AuthSsoService } from 'src/engine/core-modules/auth/services/auth-sso.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
+import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
 
 describe('AuthSsoService', () => {
   let authSsoService: AuthSsoService;
@@ -17,7 +18,7 @@ describe('AuthSsoService', () => {
       providers: [
         AuthSsoService,
         {
-          provide: getRepositoryToken(Workspace, 'core'),
+          provide: getRepositoryToken(Workspace),
           useValue: {
             findOne: jest.fn(),
           },
@@ -33,7 +34,7 @@ describe('AuthSsoService', () => {
 
     authSsoService = module.get<AuthSsoService>(AuthSsoService);
     workspaceRepository = module.get<Repository<Workspace>>(
-      getRepositoryToken(Workspace, 'core'),
+      getRepositoryToken(Workspace),
     );
     twentyConfigService = module.get<TwentyConfigService>(TwentyConfigService);
   });
@@ -49,7 +50,7 @@ describe('AuthSsoService', () => {
 
       const result =
         await authSsoService.findWorkspaceFromWorkspaceIdOrAuthProvider(
-          { authProvider: 'google', email: 'test@example.com' },
+          { authProvider: AuthProviderEnum.Google, email: 'test@example.com' },
           workspaceId,
         );
 
@@ -63,7 +64,7 @@ describe('AuthSsoService', () => {
     });
 
     it('should return a workspace from authProvider and email when multi-workspace mode is enabled', async () => {
-      const authProvider = 'google';
+      const authProvider = AuthProviderEnum.Google;
       const email = 'test@example.com';
       const mockWorkspace = { id: 'workspace-id-456' } as Workspace;
 
@@ -102,7 +103,7 @@ describe('AuthSsoService', () => {
 
       const result =
         await authSsoService.findWorkspaceFromWorkspaceIdOrAuthProvider({
-          authProvider: 'google',
+          authProvider: AuthProviderEnum.Google,
           email: 'notfound@example.com',
         });
 
