@@ -1,18 +1,24 @@
-import { OnModuleDestroy } from '@nestjs/common';
-
-import { JobsOptions, MetricsTime, Queue, QueueOptions, Worker } from 'bullmq';
-import { v4 } from 'uuid';
-import { isDefined } from 'twenty-shared/utils';
+import { Logger, type OnModuleDestroy } from '@nestjs/common';
 
 import {
-  QueueCronJobOptions,
-  QueueJobOptions,
-} from 'src/engine/core-modules/message-queue/drivers/interfaces/job-options.interface';
-import { MessageQueueDriver } from 'src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface';
-import { MessageQueueJob } from 'src/engine/core-modules/message-queue/interfaces/message-queue-job.interface';
-import { MessageQueueWorkerOptions } from 'src/engine/core-modules/message-queue/interfaces/message-queue-worker-options.interface';
+  type JobsOptions,
+  MetricsTime,
+  Queue,
+  type QueueOptions,
+  Worker,
+} from 'bullmq';
+import { isDefined } from 'twenty-shared/utils';
+import { v4 } from 'uuid';
 
-import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
+import {
+  type QueueCronJobOptions,
+  type QueueJobOptions,
+} from 'src/engine/core-modules/message-queue/drivers/interfaces/job-options.interface';
+import { type MessageQueueDriver } from 'src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface';
+import { type MessageQueueJob } from 'src/engine/core-modules/message-queue/interfaces/message-queue-job.interface';
+import { type MessageQueueWorkerOptions } from 'src/engine/core-modules/message-queue/interfaces/message-queue-worker-options.interface';
+
+import { type MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { getJobKey } from 'src/engine/core-modules/message-queue/utils/get-job-key.util';
 
 export type BullMQDriverOptions = QueueOptions;
@@ -20,6 +26,7 @@ export type BullMQDriverOptions = QueueOptions;
 const V4_LENGTH = 36;
 
 export class BullMQDriver implements MessageQueueDriver, OnModuleDestroy {
+  private logger = new Logger(BullMQDriver.name);
   private queueMap: Record<MessageQueue, Queue> = {} as Record<
     MessageQueue,
     Queue
@@ -65,7 +72,18 @@ export class BullMQDriver implements MessageQueueDriver, OnModuleDestroy {
       queueName,
       async (job) => {
         // TODO: Correctly support for job.id
+        const timeStart = performance.now();
+
+        this.logger.log(
+          `Processing job ${job.id} with name ${job.name} on queue ${queueName}`,
+        );
         await handler({ data: job.data, id: job.id ?? '', name: job.name });
+        const timeEnd = performance.now();
+        const executionTime = timeEnd - timeStart;
+
+        this.logger.log(
+          `Job ${job.id} with name ${job.name} processed on queue ${queueName} in ${executionTime.toFixed(2)}ms`,
+        );
       },
       workerOptions,
     );

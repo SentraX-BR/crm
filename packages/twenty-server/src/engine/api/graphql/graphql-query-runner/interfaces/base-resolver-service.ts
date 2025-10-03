@@ -1,32 +1,34 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import graphqlFields from 'graphql-fields';
-import { PermissionsOnAllObjectRecords } from 'twenty-shared/constants';
-import { capitalize, isDefined } from 'twenty-shared/utils';
-import { ObjectLiteral } from 'typeorm';
-
-import { ObjectRecord } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
-import { IConnection } from 'src/engine/api/graphql/workspace-query-runner/interfaces/connection.interface';
-import { IEdge } from 'src/engine/api/graphql/workspace-query-runner/interfaces/edge.interface';
-import { WorkspaceQueryRunnerOptions } from 'src/engine/api/graphql/workspace-query-runner/interfaces/query-runner-option.interface';
 import {
-  ResolverArgs,
+  assertIsDefinedOrThrow,
+  capitalize,
+  isDefined,
+} from 'twenty-shared/utils';
+import { type ObjectLiteral } from 'typeorm';
+
+import { type ObjectRecord } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
+import { type IConnection } from 'src/engine/api/graphql/workspace-query-runner/interfaces/connection.interface';
+import { type IEdge } from 'src/engine/api/graphql/workspace-query-runner/interfaces/edge.interface';
+import { type WorkspaceQueryRunnerOptions } from 'src/engine/api/graphql/workspace-query-runner/interfaces/query-runner-option.interface';
+import {
+  type ResolverArgs,
   ResolverArgsType,
-  WorkspaceResolverBuilderMethodNames,
+  type WorkspaceResolverBuilderMethodNames,
 } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
 
-import { SYSTEM_OBJECTS_PERMISSIONS_REQUIREMENTS } from 'src/engine/api/graphql/graphql-query-runner/constants/system-objects-permissions-requirements.constant';
-import { GraphqlQuerySelectedFieldsResult } from 'src/engine/api/graphql/graphql-query-runner/graphql-query-parsers/graphql-query-selected-fields/graphql-selected-fields.parser';
+import { OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS } from 'src/engine/api/graphql/graphql-query-runner/constants/objects-with-settings-permissions-requirements';
+import { type GraphqlQuerySelectedFieldsResult } from 'src/engine/api/graphql/graphql-query-runner/graphql-query-parsers/graphql-query-selected-fields/graphql-selected-fields.parser';
 import { GraphqlQueryParser } from 'src/engine/api/graphql/graphql-query-runner/graphql-query-parsers/graphql-query.parser';
 import { ProcessNestedRelationsHelper } from 'src/engine/api/graphql/graphql-query-runner/helpers/process-nested-relations.helper';
-import { ApiEventEmitterService } from 'src/engine/api/graphql/graphql-query-runner/services/api-event-emitter.service';
 import { QueryResultGettersFactory } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/query-result-getters.factory';
 import { QueryRunnerArgsFactory } from 'src/engine/api/graphql/workspace-query-runner/factories/query-runner-args.factory';
 import { workspaceQueryRunnerGraphqlApiExceptionHandler } from 'src/engine/api/graphql/workspace-query-runner/utils/workspace-query-runner-graphql-api-exception-handler.util';
 import { WorkspaceQueryHookService } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/workspace-query-hook.service';
-import { RESOLVER_METHOD_NAMES } from 'src/engine/api/graphql/workspace-resolver-builder/constants/resolver-method-names';
+import { ApiKeyRoleService } from 'src/engine/core-modules/api-key/api-key-role.service';
 import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { SettingPermissionType } from 'src/engine/metadata-modules/permissions/constants/setting-permission-type.constants';
+import { type PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
 import {
   PermissionsException,
   PermissionsExceptionCode,
@@ -34,9 +36,10 @@ import {
 } from 'src/engine/metadata-modules/permissions/permissions.exception';
 import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
 import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
-import { WorkspaceDataSource } from 'src/engine/twenty-orm/datasource/workspace.datasource';
-import { WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
+import { type WorkspaceDataSource } from 'src/engine/twenty-orm/datasource/workspace.datasource';
+import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { WorkspaceNotFoundDefaultError } from 'src/engine/core-modules/workspace/workspace.exception';
 
 export type GraphqlQueryResolverExecutionArgs<Input extends ResolverArgs> = {
   args: Input;
@@ -47,6 +50,7 @@ export type GraphqlQueryResolverExecutionArgs<Input extends ResolverArgs> = {
   graphqlQuerySelectedFieldsResult: GraphqlQuerySelectedFieldsResult;
   isExecutedByApiKey: boolean;
   roleId?: string;
+  shouldBypassPermissionChecks: boolean;
 };
 
 @Injectable()
@@ -65,8 +69,6 @@ export abstract class GraphqlQueryBaseResolverService<
   @Inject()
   protected readonly queryResultGettersFactory: QueryResultGettersFactory;
   @Inject()
-  protected readonly apiEventEmitterService: ApiEventEmitterService;
-  @Inject()
   protected readonly twentyORMGlobalManager: TwentyORMGlobalManager;
   @Inject()
   protected readonly processNestedRelationsHelper: ProcessNestedRelationsHelper;
@@ -74,6 +76,8 @@ export abstract class GraphqlQueryBaseResolverService<
   protected readonly permissionsService: PermissionsService;
   @Inject()
   protected readonly userRoleService: UserRoleService;
+  @Inject()
+  protected readonly apiKeyRoleService: ApiKeyRoleService;
 
   public async execute(
     args: Input,
@@ -83,27 +87,21 @@ export abstract class GraphqlQueryBaseResolverService<
     try {
       const { authContext, objectMetadataItemWithFieldMaps } = options;
 
+      const workspace = authContext.workspace;
+
+      assertIsDefinedOrThrow(workspace);
+
       await this.validate(args, options);
 
       const workspaceDataSource =
         await this.twentyORMGlobalManager.getDataSourceForWorkspace({
-          workspaceId: authContext.workspace.id,
-          shouldFailIfMetadataNotFound: false,
+          workspaceId: workspace.id,
         });
 
       const featureFlagsMap = workspaceDataSource.featureFlagMap;
 
-      const isPermissionsV2Enabled =
-        featureFlagsMap[FeatureFlagKey.IS_PERMISSIONS_V2_ENABLED];
-
       if (objectMetadataItemWithFieldMaps.isSystem === true) {
-        await this.validateSystemObjectPermissionsOrThrow(options);
-      } else {
-        if (!isPermissionsV2Enabled)
-          await this.validateObjectRecordPermissionsOrThrow({
-            operationName,
-            options,
-          });
+        await this.validateSettingsPermissionsOnObjectOrThrow(options);
       }
 
       const hookedArgs =
@@ -121,23 +119,49 @@ export abstract class GraphqlQueryBaseResolverService<
         ResolverArgsType[capitalize(operationName)],
       )) as Input;
 
-      const roleId = await this.userRoleService.getRoleIdForUserWorkspace({
-        userWorkspaceId: authContext.userWorkspaceId,
-        workspaceId: authContext.workspace.id,
-      });
+      let roleId: string | undefined;
+      let shouldBypassPermissionChecks = false;
 
-      const executedByApiKey = isDefined(authContext.apiKey);
-      const shouldBypassPermissionChecks = executedByApiKey;
+      if (isDefined(authContext.apiKey)) {
+        roleId = await this.apiKeyRoleService.getRoleIdForApiKey(
+          authContext.apiKey.id,
+          workspace.id,
+        );
+      }
+
+      if (isDefined(authContext.userWorkspaceId)) {
+        roleId = await this.userRoleService.getRoleIdForUserWorkspace({
+          userWorkspaceId: authContext.userWorkspaceId,
+          workspaceId: workspace.id,
+        });
+
+        if (!roleId) {
+          throw new PermissionsException(
+            PermissionsExceptionMessage.NO_ROLE_FOUND_FOR_USER_WORKSPACE,
+            PermissionsExceptionCode.NO_ROLE_FOUND_FOR_USER_WORKSPACE,
+          );
+        }
+      }
+
+      if (
+        !isDefined(authContext.apiKey) &&
+        !isDefined(authContext.userWorkspaceId)
+      ) {
+        throw new PermissionsException(
+          PermissionsExceptionMessage.NO_AUTHENTICATION_CONTEXT,
+          PermissionsExceptionCode.NO_AUTHENTICATION_CONTEXT,
+        );
+      }
 
       const repository = workspaceDataSource.getRepository(
         objectMetadataItemWithFieldMaps.nameSingular,
         shouldBypassPermissionChecks,
         roleId,
+        authContext,
       );
 
       const graphqlQueryParser = new GraphqlQueryParser(
-        objectMetadataItemWithFieldMaps.fieldsByName,
-        objectMetadataItemWithFieldMaps.fieldsByJoinColumnName,
+        objectMetadataItemWithFieldMaps,
         options.objectMetadataMaps,
       );
 
@@ -147,6 +171,7 @@ export abstract class GraphqlQueryBaseResolverService<
         graphqlQueryParser.parseSelectedFields(
           objectMetadataItemWithFieldMaps,
           selectedFields,
+          options.objectMetadataMaps,
         );
 
       const graphqlQueryResolverExecutionArgs = {
@@ -156,8 +181,9 @@ export abstract class GraphqlQueryBaseResolverService<
         repository,
         graphqlQueryParser,
         graphqlQuerySelectedFieldsResult,
-        isExecutedByApiKey: executedByApiKey,
+        isExecutedByApiKey: isDefined(authContext.apiKey),
         roleId,
+        shouldBypassPermissionChecks,
       };
 
       const results = await this.resolve(
@@ -168,7 +194,7 @@ export abstract class GraphqlQueryBaseResolverService<
       const resultWithGetters = await this.queryResultGettersFactory.create(
         results,
         objectMetadataItemWithFieldMaps,
-        authContext.workspace.id,
+        workspace.id,
         options.objectMetadataMaps,
       );
 
@@ -181,23 +207,27 @@ export abstract class GraphqlQueryBaseResolverService<
 
       return resultWithGetters;
     } catch (error) {
-      workspaceQueryRunnerGraphqlApiExceptionHandler(error, options);
+      workspaceQueryRunnerGraphqlApiExceptionHandler(error);
     }
   }
 
-  private async validateSystemObjectPermissionsOrThrow(
+  private async validateSettingsPermissionsOnObjectOrThrow(
     options: WorkspaceQueryRunnerOptions,
   ) {
     const { authContext, objectMetadataItemWithFieldMaps } = options;
 
+    const workspace = authContext.workspace;
+
+    assertIsDefinedOrThrow(workspace, WorkspaceNotFoundDefaultError);
+
     if (
-      Object.keys(SYSTEM_OBJECTS_PERMISSIONS_REQUIREMENTS).includes(
+      Object.keys(OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS).includes(
         objectMetadataItemWithFieldMaps.nameSingular,
       )
     ) {
-      const permissionRequired: SettingPermissionType =
+      const permissionRequired: PermissionFlagType =
         // @ts-expect-error legacy noImplicitAny
-        SYSTEM_OBJECTS_PERMISSIONS_REQUIREMENTS[
+        OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS[
           objectMetadataItemWithFieldMaps.nameSingular
         ];
 
@@ -205,8 +235,8 @@ export abstract class GraphqlQueryBaseResolverService<
         await this.permissionsService.userHasWorkspaceSettingPermission({
           userWorkspaceId: authContext.userWorkspaceId,
           setting: permissionRequired,
-          workspaceId: authContext.workspace.id,
-          isExecutedByApiKey: isDefined(authContext.apiKey),
+          workspaceId: workspace.id,
+          apiKeyId: authContext.apiKey?.id,
         });
 
       if (!userHasPermission) {
@@ -215,61 +245,6 @@ export abstract class GraphqlQueryBaseResolverService<
           PermissionsExceptionCode.PERMISSION_DENIED,
         );
       }
-    }
-  }
-
-  private async validateObjectRecordPermissionsOrThrow({
-    operationName,
-    options,
-  }: {
-    operationName: WorkspaceResolverBuilderMethodNames;
-    options: WorkspaceQueryRunnerOptions;
-  }) {
-    const requiredPermission =
-      this.getRequiredPermissionForMethod(operationName);
-
-    const userHasPermission =
-      await this.permissionsService.userHasObjectRecordsPermission({
-        userWorkspaceId: options.authContext.userWorkspaceId,
-        requiredPermission,
-        workspaceId: options.authContext.workspace.id,
-        isExecutedByApiKey: isDefined(options.authContext.apiKey),
-      });
-
-    if (!userHasPermission) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.PERMISSION_DENIED,
-        PermissionsExceptionCode.PERMISSION_DENIED,
-      );
-    }
-  }
-
-  private getRequiredPermissionForMethod(
-    operationName: WorkspaceResolverBuilderMethodNames,
-  ) {
-    switch (operationName) {
-      case RESOLVER_METHOD_NAMES.FIND_MANY:
-      case RESOLVER_METHOD_NAMES.FIND_ONE:
-      case RESOLVER_METHOD_NAMES.FIND_DUPLICATES:
-        return PermissionsOnAllObjectRecords.READ_ALL_OBJECT_RECORDS;
-      case RESOLVER_METHOD_NAMES.CREATE_MANY:
-      case RESOLVER_METHOD_NAMES.CREATE_ONE:
-      case RESOLVER_METHOD_NAMES.UPDATE_MANY:
-      case RESOLVER_METHOD_NAMES.UPDATE_ONE:
-        return PermissionsOnAllObjectRecords.UPDATE_ALL_OBJECT_RECORDS;
-      case RESOLVER_METHOD_NAMES.DELETE_MANY:
-      case RESOLVER_METHOD_NAMES.DELETE_ONE:
-      case RESOLVER_METHOD_NAMES.RESTORE_MANY:
-      case RESOLVER_METHOD_NAMES.RESTORE_ONE:
-        return PermissionsOnAllObjectRecords.SOFT_DELETE_ALL_OBJECT_RECORDS;
-      case RESOLVER_METHOD_NAMES.DESTROY_MANY:
-      case RESOLVER_METHOD_NAMES.DESTROY_ONE:
-        return PermissionsOnAllObjectRecords.DESTROY_ALL_OBJECT_RECORDS;
-      default:
-        throw new PermissionsException(
-          PermissionsExceptionMessage.UNKNOWN_OPERATION_NAME,
-          PermissionsExceptionCode.UNKNOWN_OPERATION_NAME,
-        );
     }
   }
 

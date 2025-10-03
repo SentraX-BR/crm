@@ -1,4 +1,4 @@
-import { UseFilters, UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
 import {
   Args,
   Mutation,
@@ -8,21 +8,32 @@ import {
   Resolver,
 } from '@nestjs/graphql';
 
+import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { ApiKeyRoleService } from 'src/engine/core-modules/api-key/api-key-role.service';
 import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
-import { FileService } from 'src/engine/core-modules/file/services/file.service';
+import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
+import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
 import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
 import { WorkspaceMember } from 'src/engine/core-modules/user/dtos/workspace-member.dto';
 import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
 import { AuthWorkspaceMemberId } from 'src/engine/decorators/auth/auth-workspace-member-id.decorator';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
+import { RequireFeatureFlag } from 'src/engine/guards/feature-flag.guard';
 import { SettingsPermissionsGuard } from 'src/engine/guards/settings-permissions.guard';
 import { UserAuthGuard } from 'src/engine/guards/user-auth.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
+import { AgentRoleService } from 'src/engine/metadata-modules/agent-role/agent-role.service';
+import { AgentDTO } from 'src/engine/metadata-modules/agent/dtos/agent.dto';
+import { FieldPermissionDTO } from 'src/engine/metadata-modules/object-permission/dtos/field-permission.dto';
 import { ObjectPermissionDTO } from 'src/engine/metadata-modules/object-permission/dtos/object-permission.dto';
+import { UpsertFieldPermissionsInput } from 'src/engine/metadata-modules/object-permission/dtos/upsert-field-permissions.input';
 import { UpsertObjectPermissionsInput } from 'src/engine/metadata-modules/object-permission/dtos/upsert-object-permissions.input';
+import { FieldPermissionService } from 'src/engine/metadata-modules/object-permission/field-permission/field-permission.service';
 import { ObjectPermissionService } from 'src/engine/metadata-modules/object-permission/object-permission.service';
-import { SettingPermissionType } from 'src/engine/metadata-modules/permissions/constants/setting-permission-type.constants';
+import { PermissionFlagDTO } from 'src/engine/metadata-modules/permission-flag/dtos/permission-flag.dto';
+import { UpsertPermissionFlagsInput } from 'src/engine/metadata-modules/permission-flag/dtos/upsert-permission-flag-input';
+import { PermissionFlagService } from 'src/engine/metadata-modules/permission-flag/permission-flag.service';
+import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
 import {
   PermissionsException,
   PermissionsExceptionCode,
@@ -30,28 +41,35 @@ import {
 } from 'src/engine/metadata-modules/permissions/permissions.exception';
 import { PermissionsGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-graphql-api-exception.filter';
 import { CreateRoleInput } from 'src/engine/metadata-modules/role/dtos/create-role-input.dto';
-import { RoleDTO } from 'src/engine/metadata-modules/role/dtos/role.dto';
+import {
+  ApiKeyForRoleDTO,
+  RoleDTO,
+} from 'src/engine/metadata-modules/role/dtos/role.dto';
 import { UpdateRoleInput } from 'src/engine/metadata-modules/role/dtos/update-role-input.dto';
 import { RoleService } from 'src/engine/metadata-modules/role/role.service';
-import { SettingPermissionDTO } from 'src/engine/metadata-modules/setting-permission/dtos/setting-permission.dto';
-import { UpsertSettingPermissionsInput } from 'src/engine/metadata-modules/setting-permission/dtos/upsert-setting-permission-input';
-import { SettingPermissionService } from 'src/engine/metadata-modules/setting-permission/setting-permission.service';
 import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
-import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
+import { type WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 @Resolver(() => RoleDTO)
-@UseGuards(WorkspaceAuthGuard)
-@UseGuards(SettingsPermissionsGuard(SettingPermissionType.ROLES))
-@UseFilters(PermissionsGraphqlApiExceptionFilter)
+@UsePipes(ResolverValidationPipe)
+@UseGuards(
+  WorkspaceAuthGuard,
+  SettingsPermissionsGuard(PermissionFlagType.ROLES),
+)
+@UseFilters(
+  PermissionsGraphqlApiExceptionFilter,
+  PreventNestToAutoLogGraphqlErrorsFilter,
+)
 export class RoleResolver {
   constructor(
     private readonly userRoleService: UserRoleService,
     private readonly roleService: RoleService,
     private readonly userWorkspaceService: UserWorkspaceService,
-    private readonly featureFlagService: FeatureFlagService,
     private readonly objectPermissionService: ObjectPermissionService,
-    private readonly settingPermissionService: SettingPermissionService,
-    private readonly fileService: FileService,
+    private readonly settingPermissionService: PermissionFlagService,
+    private readonly agentRoleService: AgentRoleService,
+    private readonly apiKeyRoleService: ApiKeyRoleService,
+    private readonly fieldPermissionService: FieldPermissionService,
   ) {}
 
   @Query(() => [RoleDTO])
@@ -63,8 +81,9 @@ export class RoleResolver {
   @UseGuards(UserAuthGuard)
   async updateWorkspaceMemberRole(
     @AuthWorkspace() workspace: Workspace,
-    @Args('workspaceMemberId') workspaceMemberId: string,
-    @Args('roleId', { type: () => String }) roleId: string,
+    @Args('workspaceMemberId', { type: () => UUIDScalarType })
+    workspaceMemberId: string,
+    @Args('roleId', { type: () => UUIDScalarType }) roleId: string,
     @AuthWorkspaceMemberId()
     updatorWorkspaceMemberId: string,
   ): Promise<WorkspaceMember> {
@@ -72,6 +91,10 @@ export class RoleResolver {
       throw new PermissionsException(
         PermissionsExceptionMessage.CANNOT_UPDATE_SELF_ROLE,
         PermissionsExceptionCode.CANNOT_UPDATE_SELF_ROLE,
+        {
+          userFriendlyMessage:
+            'You cannot change your own role. Please ask another administrator to update your role.',
+        },
       );
     }
 
@@ -115,8 +138,6 @@ export class RoleResolver {
     @AuthWorkspace() workspace: Workspace,
     @Args('createRoleInput') createRoleInput: CreateRoleInput,
   ): Promise<RoleDTO> {
-    await this.validatePermissionsV2EnabledOrThrow(workspace);
-
     return await this.roleService.createRole({
       workspaceId: workspace.id,
       input: createRoleInput,
@@ -128,8 +149,6 @@ export class RoleResolver {
     @AuthWorkspace() workspace: Workspace,
     @Args('updateRoleInput') updateRoleInput: UpdateRoleInput,
   ): Promise<RoleDTO> {
-    await this.validatePermissionsV2EnabledOrThrow(workspace);
-
     const role = await this.roleService.updateRole({
       input: updateRoleInput,
       workspaceId: workspace.id,
@@ -141,10 +160,8 @@ export class RoleResolver {
   @Mutation(() => String)
   async deleteOneRole(
     @AuthWorkspace() workspace: Workspace,
-    @Args('roleId') roleId: string,
+    @Args('roleId', { type: () => UUIDScalarType }) roleId: string,
   ): Promise<string> {
-    await this.validatePermissionsV2EnabledOrThrow(workspace);
-
     const deletedRoleId = await this.roleService.deleteRole(
       roleId,
       workspace.id,
@@ -159,26 +176,64 @@ export class RoleResolver {
     @Args('upsertObjectPermissionsInput')
     upsertObjectPermissionsInput: UpsertObjectPermissionsInput,
   ): Promise<ObjectPermissionDTO[]> {
-    await this.validatePermissionsV2EnabledOrThrow(workspace);
-
     return this.objectPermissionService.upsertObjectPermissions({
       workspaceId: workspace.id,
       input: upsertObjectPermissionsInput,
     });
   }
 
-  @Mutation(() => [SettingPermissionDTO])
-  async upsertSettingPermissions(
+  @Mutation(() => [PermissionFlagDTO])
+  async upsertPermissionFlags(
     @AuthWorkspace() workspace: Workspace,
-    @Args('upsertSettingPermissionsInput')
-    upsertSettingPermissionsInput: UpsertSettingPermissionsInput,
-  ): Promise<SettingPermissionDTO[]> {
-    await this.validatePermissionsV2EnabledOrThrow(workspace);
-
-    return this.settingPermissionService.upsertSettingPermissions({
+    @Args('upsertPermissionFlagsInput')
+    upsertPermissionFlagsInput: UpsertPermissionFlagsInput,
+  ): Promise<PermissionFlagDTO[]> {
+    return this.settingPermissionService.upsertPermissionFlags({
       workspaceId: workspace.id,
-      input: upsertSettingPermissionsInput,
+      input: upsertPermissionFlagsInput,
     });
+  }
+
+  @Mutation(() => [FieldPermissionDTO])
+  async upsertFieldPermissions(
+    @AuthWorkspace() workspace: Workspace,
+    @Args('upsertFieldPermissionsInput')
+    upsertFieldPermissionsInput: UpsertFieldPermissionsInput,
+  ): Promise<FieldPermissionDTO[]> {
+    return this.fieldPermissionService.upsertFieldPermissions({
+      workspaceId: workspace.id,
+      input: upsertFieldPermissionsInput,
+    });
+  }
+
+  @Mutation(() => Boolean)
+  @RequireFeatureFlag(FeatureFlagKey.IS_AI_ENABLED)
+  async assignRoleToAgent(
+    @Args('agentId', { type: () => UUIDScalarType }) agentId: string,
+    @Args('roleId', { type: () => UUIDScalarType }) roleId: string,
+    @AuthWorkspace() { id: workspaceId }: Workspace,
+  ) {
+    await this.agentRoleService.assignRoleToAgent({
+      agentId,
+      roleId,
+      workspaceId,
+    });
+
+    return true;
+  }
+
+  @Mutation(() => Boolean)
+  @RequireFeatureFlag(FeatureFlagKey.IS_AI_ENABLED)
+  async removeRoleFromAgent(
+    @Args('agentId', { type: () => UUIDScalarType }) agentId: string,
+    @AuthWorkspace() { id: workspaceId }: Workspace,
+  ) {
+    await this.agentRoleService.removeRoleFromAgent({
+      agentId,
+      workspaceId,
+    });
+
+    return true;
   }
 
   @ResolveField('workspaceMembers', () => [WorkspaceMember])
@@ -195,18 +250,34 @@ export class RoleResolver {
     return workspaceMembers;
   }
 
-  private async validatePermissionsV2EnabledOrThrow(workspace: Workspace) {
-    const isPermissionsV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_PERMISSIONS_V2_ENABLED,
-        workspace.id,
-      );
+  @ResolveField('agents', () => [AgentDTO])
+  async getAgentsAssignedToRole(
+    @Parent() role: RoleDTO,
+    @AuthWorkspace() workspace: Workspace,
+  ): Promise<AgentDTO[]> {
+    const agents = await this.agentRoleService.getAgentsAssignedToRole(
+      role.id,
+      workspace.id,
+    );
 
-    if (!isPermissionsV2Enabled) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.PERMISSIONS_V2_NOT_ENABLED,
-        PermissionsExceptionCode.PERMISSIONS_V2_NOT_ENABLED,
-      );
-    }
+    return agents;
+  }
+
+  @ResolveField('apiKeys', () => [ApiKeyForRoleDTO])
+  async getApiKeysAssignedToRole(
+    @Parent() role: RoleDTO,
+    @AuthWorkspace() workspace: Workspace,
+  ): Promise<ApiKeyForRoleDTO[]> {
+    const apiKeys = await this.apiKeyRoleService.getApiKeysAssignedToRole(
+      role.id,
+      workspace.id,
+    );
+
+    return apiKeys.map((apiKey) => ({
+      id: apiKey.id,
+      name: apiKey.name,
+      expiresAt: apiKey.expiresAt,
+      revokedAt: apiKey.revokedAt,
+    }));
   }
 }

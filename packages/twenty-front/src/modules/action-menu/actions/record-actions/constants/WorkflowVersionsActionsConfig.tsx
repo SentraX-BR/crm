@@ -1,7 +1,7 @@
 import { ActionLink } from '@/action-menu/actions/components/ActionLink';
 import { MultipleRecordsActionKeys } from '@/action-menu/actions/record-actions/multiple-records/types/MultipleRecordsActionKeys';
 import { NoSelectionRecordActionKeys } from '@/action-menu/actions/record-actions/no-selection/types/NoSelectionRecordActionsKeys';
-import { NoSelectionWorkflowRecordActionKeys } from '@/action-menu/actions/record-actions/no-selection/workflow-actions/types/NoSelectionWorkflowRecordActionsKeys';
+import { NoSelectionWorkflowRecordActionKeys } from '@/action-menu/actions/record-actions/no-selection/workflow-actions/types/NoSelectionWorkflowRecordActionKeys';
 import { SingleRecordActionKeys } from '@/action-menu/actions/record-actions/single-record/types/SingleRecordActionsKey';
 import { SeeRunsWorkflowVersionSingleRecordAction } from '@/action-menu/actions/record-actions/single-record/workflow-version-actions/components/SeeRunsWorkflowVersionSingleRecordAction';
 import { SeeVersionsWorkflowVersionSingleRecordAction } from '@/action-menu/actions/record-actions/single-record/workflow-version-actions/components/SeeVersionsWorkflowVersionSingleRecordAction';
@@ -13,8 +13,8 @@ import { ActionScope } from '@/action-menu/actions/types/ActionScope';
 import { ActionType } from '@/action-menu/actions/types/ActionType';
 import { ActionViewType } from '@/action-menu/actions/types/ActionViewType';
 import { CoreObjectNamePlural } from '@/object-metadata/types/CoreObjectNamePlural';
-import { AppPath } from '@/types/AppPath';
 import { msg } from '@lingui/core/macro';
+import { AppPath } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import {
   IconHistoryToggle,
@@ -118,7 +118,8 @@ export const WORKFLOW_VERSIONS_ACTIONS_CONFIG = inheritActionsFromDefaultConfig(
       SingleRecordActionKeys.NAVIGATE_TO_NEXT_RECORD,
       SingleRecordActionKeys.ADD_TO_FAVORITES,
       SingleRecordActionKeys.REMOVE_FROM_FAVORITES,
-      SingleRecordActionKeys.EXPORT,
+      SingleRecordActionKeys.EXPORT_FROM_RECORD_INDEX,
+      SingleRecordActionKeys.EXPORT_FROM_RECORD_SHOW,
       MultipleRecordsActionKeys.EXPORT,
       NoSelectionRecordActionKeys.EXPORT_VIEW,
       NoSelectionRecordActionKeys.SEE_DELETED_RECORDS,
@@ -140,7 +141,11 @@ export const WORKFLOW_VERSIONS_ACTIONS_CONFIG = inheritActionsFromDefaultConfig(
         position: 6,
         isPinned: false,
       },
-      [SingleRecordActionKeys.EXPORT]: {
+      [SingleRecordActionKeys.EXPORT_FROM_RECORD_INDEX]: {
+        position: 7,
+        label: msg`Export version`,
+      },
+      [SingleRecordActionKeys.EXPORT_FROM_RECORD_SHOW]: {
         position: 7,
         label: msg`Export version`,
       },

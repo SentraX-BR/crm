@@ -1,4 +1,4 @@
-import { LogLevel, Logger } from '@nestjs/common';
+import { type LogLevel, Logger } from '@nestjs/common';
 
 import { plainToClass } from 'class-transformer';
 import {
@@ -6,12 +6,11 @@ import {
   IsOptional,
   IsUrl,
   ValidateIf,
-  ValidationError,
+  type ValidationError,
   validateSync,
 } from 'class-validator';
 import { isDefined } from 'twenty-shared/utils';
 
-import { AiDriver } from 'src/engine/core-modules/ai/interfaces/ai.interface';
 import { AwsRegion } from 'src/engine/core-modules/twenty-config/interfaces/aws-region.interface';
 import { NodeEnvironment } from 'src/engine/core-modules/twenty-config/interfaces/node-environment.interface';
 import { SupportDriver } from 'src/engine/core-modules/twenty-config/interfaces/support.interface';
@@ -21,7 +20,7 @@ import { EmailDriver } from 'src/engine/core-modules/email/enums/email-driver.en
 import { ExceptionHandlerDriver } from 'src/engine/core-modules/exception-handler/interfaces';
 import { StorageDriverType } from 'src/engine/core-modules/file-storage/interfaces';
 import { LoggerDriverType } from 'src/engine/core-modules/logger/interfaces';
-import { MeterDriver } from 'src/engine/core-modules/metrics/types/meter-driver.type';
+import { type MeterDriver } from 'src/engine/core-modules/metrics/types/meter-driver.type';
 import { ServerlessDriverType } from 'src/engine/core-modules/serverless/serverless.interface';
 import { CastToLogLevelArray } from 'src/engine/core-modules/twenty-config/decorators/cast-to-log-level-array.decorator';
 import { CastToMeterDriverArray } from 'src/engine/core-modules/twenty-config/decorators/cast-to-meter-driver.decorator';
@@ -144,6 +143,13 @@ export class ConfigVariables {
   MESSAGING_PROVIDER_GMAIL_ENABLED = false;
 
   @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.Other,
+    description: 'Enable or disable the IMAP messaging integration',
+    type: ConfigVariableType.BOOLEAN,
+  })
+  IS_IMAP_SMTP_CALDAV_ENABLED = false;
+
+  @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.MicrosoftAuth,
     description: 'Enable or disable Microsoft authentication',
     type: ConfigVariableType.BOOLEAN,
@@ -222,6 +228,15 @@ export class ConfigVariables {
   @IsDuration()
   @IsOptional()
   ACCESS_TOKEN_EXPIRES_IN = '30m';
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.TokensDuration,
+    description: 'Duration for which the workspace agnostic token is valid',
+    type: ConfigVariableType.STRING,
+  })
+  @IsDuration()
+  @IsOptional()
+  WORKSPACE_AGNOSTIC_TOKEN_EXPIRES_IN = '30m';
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.TokensDuration,
@@ -551,21 +566,12 @@ export class ConfigVariables {
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.BillingConfig,
-    description: 'Amount of money in cents to trigger a billing threshold',
-    type: ConfigVariableType.NUMBER,
-  })
-  @CastToPositiveNumber()
-  @ValidateIf((env) => env.IS_BILLING_ENABLED === true)
-  BILLING_SUBSCRIPTION_THRESHOLD_AMOUNT = 10000;
-
-  @ConfigVariablesMetadata({
-    group: ConfigVariablesGroup.BillingConfig,
     description: 'Amount of credits for the free trial without credit card',
     type: ConfigVariableType.NUMBER,
   })
   @CastToPositiveNumber()
   @ValidateIf((env) => env.IS_BILLING_ENABLED === true)
-  BILLING_FREE_WORKFLOW_CREDITS_FOR_TRIAL_PERIOD_WITHOUT_CREDIT_CARD = 5000;
+  BILLING_FREE_WORKFLOW_CREDITS_FOR_TRIAL_PERIOD_WITHOUT_CREDIT_CARD = 500_000;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.BillingConfig,
@@ -574,7 +580,7 @@ export class ConfigVariables {
   })
   @CastToPositiveNumber()
   @ValidateIf((env) => env.IS_BILLING_ENABLED === true)
-  BILLING_FREE_WORKFLOW_CREDITS_FOR_TRIAL_PERIOD_WITH_CREDIT_CARD = 10000;
+  BILLING_FREE_WORKFLOW_CREDITS_FOR_TRIAL_PERIOD_WITH_CREDIT_CARD = 5_000_000;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.BillingConfig,
@@ -620,6 +626,14 @@ export class ConfigVariables {
   })
   @IsOptional()
   CHROME_EXTENSION_ID: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.Other,
+    description: 'Page ID for Cal.com booking integration',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  CALENDAR_BOOKING_PAGE_ID?: string;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.Logging,
@@ -827,7 +841,22 @@ export class ConfigVariables {
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.ServerConfig,
     isSensitive: true,
-    description: 'URL for cache storage (e.g., Redis connection URL)',
+    description: 'Redis connection URL used for cache and queues by default',
+    isEnvOnly: true,
+    type: ConfigVariableType.STRING,
+  })
+  @IsUrl({
+    protocols: ['redis', 'rediss'],
+    require_tld: false,
+    allow_underscores: true,
+  })
+  REDIS_URL: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.ServerConfig,
+    isSensitive: true,
+    description:
+      'Optional separate Redis connection for queues with a different eviction policy (advanced production use case, most self-hosters do not need this)',
     isEnvOnly: true,
     type: ConfigVariableType.STRING,
   })
@@ -837,7 +866,7 @@ export class ConfigVariables {
     require_tld: false,
     allow_underscores: true,
   })
-  REDIS_URL: string;
+  REDIS_QUEUE_URL: string;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.ServerConfig,
@@ -868,6 +897,15 @@ export class ConfigVariables {
   @IsUrl({ require_tld: false, require_protocol: true })
   @IsOptional()
   SERVER_URL = 'http://localhost:3000';
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.ServerConfig,
+    description: 'Base URL for public domains',
+    type: ConfigVariableType.STRING,
+  })
+  @IsUrl({ require_tld: false, require_protocol: true })
+  @IsOptional()
+  PUBLIC_DOMAIN_URL: string;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.ServerConfig,
@@ -941,6 +979,14 @@ export class ConfigVariables {
   CLOUDFLARE_ZONE_ID: string;
 
   @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.CloudflareConfig,
+    description: 'Zone ID for public domain Cloudflare integration',
+    type: ConfigVariableType.STRING,
+  })
+  @ValidateIf((env) => env.PUBLIC_DOMAIN_URL)
+  CLOUDFLARE_PUBLIC_DOMAIN_ZONE_ID: string;
+
+  @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.Other,
     description: 'Random string to validate queries from Cloudflare',
     type: ConfigVariableType.STRING,
@@ -950,14 +996,22 @@ export class ConfigVariables {
   CLOUDFLARE_WEBHOOK_SECRET: string;
 
   @ConfigVariablesMetadata({
-    group: ConfigVariablesGroup.LLM,
-    description: 'Driver for the AI chat model',
-    type: ConfigVariableType.ENUM,
-    options: Object.values(AiDriver),
-    isEnvOnly: true,
+    group: ConfigVariablesGroup.Other,
+    description:
+      'Id to generate value for CNAME record to validate ownership and manage ssl for custom hostname with Cloudflare',
+    type: ConfigVariableType.STRING,
   })
-  @CastToUpperSnakeCase()
-  AI_DRIVER: AiDriver;
+  @IsOptional()
+  CLOUDFLARE_DCV_DELEGATION_ID: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.LLM,
+    description:
+      'Default model ID for AI operations (can be any available model)',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  DEFAULT_MODEL_ID = 'gpt-4o';
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.LLM,
@@ -965,7 +1019,54 @@ export class ConfigVariables {
     description: 'API key for OpenAI integration',
     type: ConfigVariableType.STRING,
   })
+  @IsOptional()
   OPENAI_API_KEY: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.LLM,
+    isSensitive: true,
+    description: 'API key for Anthropic integration',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  ANTHROPIC_API_KEY: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.LLM,
+    description: 'Base URL for OpenAI-compatible LLM provider (e.g., Ollama)',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  @IsUrl({ require_tld: false, require_protocol: true })
+  OPENAI_COMPATIBLE_BASE_URL: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.LLM,
+    description:
+      'Model names for OpenAI-compatible LLM provider (comma-separated, e.g., "llama3.1, mistral, codellama")',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  OPENAI_COMPATIBLE_MODEL_NAMES: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.LLM,
+    isSensitive: true,
+    description:
+      'API key for OpenAI-compatible LLM provider (optional for providers like Ollama)',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  OPENAI_COMPATIBLE_API_KEY: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.LLM,
+    isSensitive: true,
+    description: 'API key for xAI integration',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  XAI_API_KEY: string;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.ServerConfig,
@@ -1025,7 +1126,7 @@ export class ConfigVariables {
     type: ConfigVariableType.NUMBER,
   })
   @CastToPositiveNumber()
-  WORKFLOW_EXEC_THROTTLE_LIMIT = 100;
+  WORKFLOW_EXEC_THROTTLE_LIMIT = 10;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.RateLimiting,
@@ -1099,6 +1200,67 @@ export class ConfigVariables {
   @IsOptionalOrEmptyString()
   @IsTwentySemVer()
   APP_VERSION?: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.Other,
+    description: 'Enable or disable google map api usage',
+    type: ConfigVariableType.BOOLEAN,
+  })
+  @IsOptional()
+  IS_MAPS_AND_ADDRESS_AUTOCOMPLETE_ENABLED = false;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.Other,
+    isSensitive: true,
+    description: 'Google map api key for places and map',
+    type: ConfigVariableType.STRING,
+  })
+  @ValidateIf((env) => env.IS_MAPS_AND_ADDRESS_AUTOCOMPLETE_ENABLED)
+  GOOGLE_MAP_API_KEY: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.AwsSesSettings,
+    description: 'AWS region',
+    type: ConfigVariableType.STRING,
+  })
+  @IsAWSRegion()
+  @IsOptional()
+  AWS_SES_REGION: AwsRegion;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.AwsSesSettings,
+    isSensitive: true,
+    description: 'AWS access key ID',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  AWS_SES_ACCESS_KEY_ID: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.AwsSesSettings,
+    isSensitive: true,
+    description: 'AWS session token',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  AWS_SES_SESSION_TOKEN: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.AwsSesSettings,
+    isSensitive: true,
+    description: 'AWS secret access key',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  AWS_SES_SECRET_ACCESS_KEY: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.AwsSesSettings,
+    description: 'AWS Account ID for SES ARN construction',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  AWS_SES_ACCOUNT_ID: string;
 }
 
 export const validate = (config: Record<string, unknown>): ConfigVariables => {

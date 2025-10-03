@@ -1,23 +1,27 @@
+import { SidePanelHeader } from '@/command-menu/components/SidePanelHeader';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
 import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
 import { formatFieldMetadataItemAsFieldDefinition } from '@/object-metadata/utils/formatFieldMetadataItemAsFieldDefinition';
-import { FormFieldInput } from '@/object-record/record-field/components/FormFieldInput';
+import { FormFieldInput } from '@/object-record/record-field/ui/components/FormFieldInput';
+import { isFieldRelation } from '@/object-record/record-field/ui/types/guards/isFieldRelation';
 import { Select } from '@/ui/input/components/Select';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
 import { useViewOrDefaultViewFromPrefetchedViews } from '@/views/hooks/useViewOrDefaultViewFromPrefetchedViews';
-import { WorkflowCreateRecordAction } from '@/workflow/types/Workflow';
+import { type WorkflowCreateRecordAction } from '@/workflow/types/Workflow';
+import { WorkflowActionFooter } from '@/workflow/workflow-steps/components/WorkflowActionFooter';
 import { WorkflowStepBody } from '@/workflow/workflow-steps/components/WorkflowStepBody';
-import { WorkflowStepHeader } from '@/workflow/workflow-steps/components/WorkflowStepHeader';
-import { useActionHeaderTypeOrThrow } from '@/workflow/workflow-steps/workflow-actions/hooks/useActionHeaderTypeOrThrow';
-import { useActionIconColorOrThrow } from '@/workflow/workflow-steps/workflow-actions/hooks/useActionIconColorOrThrow';
-import { getActionIcon } from '@/workflow/workflow-steps/workflow-actions/utils/getActionIcon';
+import { useWorkflowActionHeader } from '@/workflow/workflow-steps/workflow-actions/hooks/useWorkflowActionHeader';
+import { shouldDisplayFormField } from '@/workflow/workflow-steps/workflow-actions/utils/shouldDisplayFormField';
 import { WorkflowVariablePicker } from '@/workflow/workflow-variables/components/WorkflowVariablePicker';
+import { useTheme } from '@emotion/react';
 import { useEffect, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
+import { canObjectBeManagedByWorkflow } from 'twenty-shared/workflow';
 import { HorizontalSeparator, useIcons } from 'twenty-ui/display';
-import { SelectOption } from 'twenty-ui/input';
-import { JsonValue } from 'type-fest';
+import { type SelectOption } from 'twenty-ui/input';
+import { type JsonValue } from 'type-fest';
 import { useDebouncedCallback } from 'use-debounce';
-import { shouldDisplayFormField } from '@/workflow/workflow-steps/workflow-actions/utils/shouldDisplayFormField';
+import { RelationType } from '~/generated-metadata/graphql';
 
 type WorkflowEditActionCreateRecordProps = {
   action: WorkflowCreateRecordAction;
@@ -31,9 +35,13 @@ type WorkflowEditActionCreateRecordProps = {
       };
 };
 
+type RelationManyToOneField = {
+  id: string;
+};
+
 type CreateRecordFormData = {
   objectName: string;
-  [field: string]: unknown;
+  [field: string]: RelationManyToOneField | JsonValue;
 };
 
 const sortByViewFieldPosition = (
@@ -59,22 +67,32 @@ export const WorkflowEditActionCreateRecord = ({
   action,
   actionOptions,
 }: WorkflowEditActionCreateRecordProps) => {
+  const theme = useTheme();
+
   const { getIcon } = useIcons();
 
   const { activeNonSystemObjectMetadataItems } =
     useFilteredObjectMetadataItems();
 
   const availableMetadata: Array<SelectOption<string>> =
-    activeNonSystemObjectMetadataItems.map((item) => ({
-      Icon: getIcon(item.icon),
-      label: item.labelPlural,
-      value: item.nameSingular,
-    }));
+    activeNonSystemObjectMetadataItems
+      .filter((objectMetadataItem) =>
+        canObjectBeManagedByWorkflow({
+          nameSingular: objectMetadataItem.nameSingular,
+          isSystem: objectMetadataItem.isSystem,
+        }),
+      )
+      .map((item) => ({
+        Icon: getIcon(item.icon),
+        label: item.labelPlural,
+        value: item.nameSingular,
+      }));
 
   const [formData, setFormData] = useState<CreateRecordFormData>({
     objectName: action.settings.input.objectName,
     ...action.settings.input.objectRecord,
   });
+
   const isFormDisabled = actionOptions.readonly;
 
   const objectNameSingular = formData.objectName;
@@ -121,9 +139,27 @@ export const WorkflowEditActionCreateRecord = ({
     fieldName: keyof CreateRecordFormData,
     updatedValue: JsonValue,
   ) => {
+    const fieldDefinition = inlineFieldDefinitions?.find(
+      (definition) => definition.metadata.fieldName === fieldName,
+    );
+
+    if (!isDefined(fieldDefinition)) {
+      return;
+    }
+
+    const isFieldRelationManyToOne =
+      isFieldRelation(fieldDefinition) &&
+      fieldDefinition.metadata.relationType === RelationType.MANY_TO_ONE;
+
+    const fieldValue = isFieldRelationManyToOne
+      ? {
+          id: updatedValue,
+        }
+      : updatedValue;
+
     const newFormData: CreateRecordFormData = {
       ...formData,
-      [fieldName]: updatedValue,
+      [fieldName]: fieldValue,
     };
 
     setFormData(newFormData);
@@ -159,14 +195,15 @@ export const WorkflowEditActionCreateRecord = ({
     };
   }, [saveAction]);
 
-  const headerTitle = isDefined(action.name) ? action.name : `Create Record`;
-  const headerIcon = getActionIcon(action.type);
-  const headerIconColor = useActionIconColorOrThrow(action.type);
-  const headerType = useActionHeaderTypeOrThrow(action.type);
+  const { headerTitle, headerIcon, headerIconColor, headerType } =
+    useWorkflowActionHeader({
+      action,
+      defaultTitle: 'Create Record',
+    });
 
   return (
     <>
-      <WorkflowStepHeader
+      <SidePanelHeader
         onTitleChange={(newName: string) => {
           if (actionOptions.readonly === true) {
             return;
@@ -202,20 +239,32 @@ export const WorkflowEditActionCreateRecord = ({
             saveAction(newFormData);
           }}
           withSearchInput
+          dropdownOffset={{ y: parseInt(theme.spacing(1), 10) }}
+          dropdownWidth={GenericDropdownContentWidth.ExtraLarge}
         />
 
         <HorizontalSeparator noMargin />
 
-        {inlineFieldDefinitions?.map((field) => {
-          const currentValue = formData[field.metadata.fieldName] as JsonValue;
+        {inlineFieldDefinitions?.map((fieldDefinition) => {
+          const isFieldRelationManyToOne =
+            isFieldRelation(fieldDefinition) &&
+            fieldDefinition.metadata.relationType === RelationType.MANY_TO_ONE;
+
+          const currentValue = isFieldRelationManyToOne
+            ? (
+                formData[
+                  fieldDefinition.metadata.fieldName
+                ] as RelationManyToOneField
+              )?.id
+            : (formData[fieldDefinition.metadata.fieldName] as JsonValue);
 
           return (
             <FormFieldInput
-              key={field.metadata.fieldName}
+              key={fieldDefinition.metadata.fieldName}
               defaultValue={currentValue}
-              field={field}
+              field={fieldDefinition}
               onChange={(value) => {
-                handleFieldChange(field.metadata.fieldName, value);
+                handleFieldChange(fieldDefinition.metadata.fieldName, value);
               }}
               VariablePicker={WorkflowVariablePicker}
               readonly={isFormDisabled}
@@ -223,6 +272,7 @@ export const WorkflowEditActionCreateRecord = ({
           );
         })}
       </WorkflowStepBody>
+      {!actionOptions.readonly && <WorkflowActionFooter stepId={action.id} />}
     </>
   );
 };

@@ -1,6 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
-
-import { FieldMetadataInterface } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata.interface';
+import { Test, type TestingModule } from '@nestjs/testing';
 
 import {
   fieldCurrencyMock,
@@ -9,10 +7,15 @@ import {
   objectMetadataMapItemMock,
 } from 'src/engine/api/__mocks__/object-metadata-item.mock';
 import { FilterInputFactory } from 'src/engine/api/rest/input-factories/filter-input.factory';
-import { FieldMetadataMap } from 'src/engine/metadata-modules/types/field-metadata-map';
+import { type FieldMetadataMap } from 'src/engine/metadata-modules/types/field-metadata-map';
+import { type ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
+import { getMockFieldMetadataEntity } from 'src/utils/__test__/get-field-metadata-entity.mock';
 
 describe('FilterInputFactory', () => {
-  const completeFieldNumberMock: FieldMetadataInterface = {
+  const workspaceId = '20202020-cc80-4306-ad69-da9e11997292';
+
+  const completeFieldNumberMock = getMockFieldMetadataEntity({
+    workspaceId,
     id: 'field-number-id',
     type: fieldNumberMock.type,
     name: fieldNumberMock.name,
@@ -20,9 +23,13 @@ describe('FilterInputFactory', () => {
     objectMetadataId: 'object-metadata-id',
     isNullable: fieldNumberMock.isNullable,
     defaultValue: fieldNumberMock.defaultValue,
-  };
+    isLabelSyncedWithName: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
-  const completeFieldTextMock: FieldMetadataInterface = {
+  const completeFieldTextMock = getMockFieldMetadataEntity({
+    workspaceId,
     id: 'field-text-id',
     type: fieldTextMock.type,
     name: fieldTextMock.name,
@@ -30,9 +37,13 @@ describe('FilterInputFactory', () => {
     objectMetadataId: 'object-metadata-id',
     isNullable: fieldTextMock.isNullable,
     defaultValue: fieldTextMock.defaultValue,
-  };
+    isLabelSyncedWithName: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
-  const completeFieldCurrencyMock: FieldMetadataInterface = {
+  const completeFieldCurrencyMock = getMockFieldMetadataEntity({
+    workspaceId,
     id: 'field-currency-id',
     type: fieldCurrencyMock.type,
     name: fieldCurrencyMock.name,
@@ -40,7 +51,10 @@ describe('FilterInputFactory', () => {
     objectMetadataId: 'object-metadata-id',
     isNullable: fieldCurrencyMock.isNullable,
     defaultValue: fieldCurrencyMock.defaultValue,
-  };
+    isLabelSyncedWithName: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
   const fieldsById: FieldMetadataMap = {
     'field-number-id': completeFieldNumberMock,
@@ -48,16 +62,15 @@ describe('FilterInputFactory', () => {
     'field-currency-id': completeFieldCurrencyMock,
   };
 
-  const fieldsByName: FieldMetadataMap = {
-    [completeFieldNumberMock.name]: completeFieldNumberMock,
-    [completeFieldTextMock.name]: completeFieldTextMock,
-    [completeFieldCurrencyMock.name]: completeFieldCurrencyMock,
-  };
-
-  const objectMetadataMapItem = {
+  const objectMetadataMapItem: ObjectMetadataItemWithFieldMaps = {
     ...objectMetadataMapItemMock,
     fieldsById,
-    fieldsByName,
+    fieldIdByName: {
+      [completeFieldNumberMock.name]: completeFieldNumberMock.id,
+      [completeFieldTextMock.name]: completeFieldTextMock.id,
+      [completeFieldCurrencyMock.name]: completeFieldCurrencyMock.id,
+    },
+    fieldIdByJoinColumnName: {},
   };
 
   const objectMetadataMaps = {

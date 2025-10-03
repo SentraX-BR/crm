@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 
 import { FieldMetadataType } from 'twenty-shared/types';
 
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
+import { type ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
 
 export const checkFilterEnumValues = (
   fieldType: FieldMetadataType | undefined,
@@ -18,7 +18,8 @@ export const checkFilterEnumValues = (
   ) {
     return;
   }
-  const field = objectMetadataItem.fieldsByName[fieldName];
+  const fieldMetadataId = objectMetadataItem.fieldIdByName[fieldName];
+  const field = objectMetadataItem.fieldsById[fieldMetadataId];
 
   const values = /^\[.*\]$/.test(value)
     ? value.slice(1, -1).split(',')

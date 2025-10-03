@@ -1,7 +1,7 @@
+import { SidePanelHeader } from '@/command-menu/components/SidePanelHeader';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { FieldMultiSelectValue } from '@/object-record/record-field/types/FieldMetadata';
+import { type FieldMultiSelectValue } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { SelectControl } from '@/ui/input/components/SelectControl';
-import { SelectHotkeyScope } from '@/ui/input/types/SelectHotkeyScope';
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { DropdownMenuHeader } from '@/ui/layout/dropdown/components/DropdownMenuHeader/DropdownMenuHeader';
@@ -9,15 +9,16 @@ import { DropdownMenuHeaderLeftComponent } from '@/ui/layout/dropdown/components
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
-import { useDropdown } from '@/ui/layout/dropdown/hooks/useDropdown';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
 import { WorkflowFieldsMultiSelect } from '@/workflow/components/WorkflowEditUpdateEventFieldsMultiSelect';
-import { WorkflowDatabaseEventTrigger } from '@/workflow/types/Workflow';
+import { type WorkflowDatabaseEventTrigger } from '@/workflow/types/Workflow';
 import { splitWorkflowTriggerEventName } from '@/workflow/utils/splitWorkflowTriggerEventName';
 import { WorkflowStepBody } from '@/workflow/workflow-steps/components/WorkflowStepBody';
-import { WorkflowStepHeader } from '@/workflow/workflow-steps/components/WorkflowStepHeader';
+import { getTriggerDefaultLabel } from '@/workflow/workflow-trigger/utils/getTriggerDefaultLabel';
 import { getTriggerHeaderType } from '@/workflow/workflow-trigger/utils/getTriggerHeaderType';
 import { getTriggerIcon } from '@/workflow/workflow-trigger/utils/getTriggerIcon';
-import { getTriggerDefaultLabel } from '@/workflow/workflow-trigger/utils/getTriggerLabel';
+import { getTriggerIconColor } from '@/workflow/workflow-trigger/utils/getTriggerIconColor';
 import { useTheme } from '@emotion/react';
 import styled from '@emotion/styled';
 import { Trans } from '@lingui/react/macro';
@@ -71,7 +72,9 @@ export const WorkflowEditTriggerDatabaseEventForm = ({
   const { getIcon } = useIcons();
   const [searchInputValue, setSearchInputValue] = useState('');
   const [isSystemObjectsOpen, setIsSystemObjectsOpen] = useState(false);
-  const { closeDropdown } = useDropdown('workflow-edit-trigger-record-type');
+  const dropdownId = 'workflow-edit-trigger-record-type';
+
+  const { closeDropdown } = useCloseDropdown();
 
   const { objectMetadataItems } = useFilteredObjectMetadataItems();
 
@@ -79,6 +82,8 @@ export const WorkflowEditTriggerDatabaseEventForm = ({
     trigger.settings.eventName,
   );
   const isUpdateEvent = triggerEvent.event === 'updated';
+  const isUpsertEvent = triggerEvent.event === 'upserted';
+  const isFieldFilteringSupported = isUpdateEvent || isUpsertEvent;
 
   const regularObjects = objectMetadataItems
     .filter((item) => item.isActive && !item.isSystem)
@@ -131,7 +136,7 @@ export const WorkflowEditTriggerDatabaseEventForm = ({
         eventName: `${value}.${triggerEvent.event}`,
       },
     });
-    closeDropdown();
+    closeDropdown(dropdownId);
   };
 
   const handleFieldsChange = (fields: FieldMultiSelectValue | string) => {
@@ -167,7 +172,7 @@ export const WorkflowEditTriggerDatabaseEventForm = ({
 
   return (
     <>
-      <WorkflowStepHeader
+      <SidePanelHeader
         onTitleChange={(newName: string) => {
           if (triggerOptions.readonly === true) {
             return;
@@ -179,7 +184,7 @@ export const WorkflowEditTriggerDatabaseEventForm = ({
           });
         }}
         Icon={getIcon(headerIcon)}
-        iconColor={theme.font.color.tertiary}
+        iconColor={getTriggerIconColor({ theme, triggerType: trigger.type })}
         initialTitle={defaultLabel}
         headerType={headerType}
         disabled={triggerOptions.readonly}
@@ -198,72 +203,77 @@ export const WorkflowEditTriggerDatabaseEventForm = ({
             }
             dropdownComponents={
               <>
-                {isSystemObjectsOpen ? (
-                  <DropdownContent>
-                    <DropdownMenuHeader
-                      StartComponent={
-                        <DropdownMenuHeaderLeftComponent
-                          onClick={handleBack}
-                          Icon={IconChevronLeft}
-                        />
-                      }
+                {!triggerOptions.readonly &&
+                  (isSystemObjectsOpen ? (
+                    <DropdownContent
+                      widthInPixels={GenericDropdownContentWidth.ExtraLarge}
                     >
-                      <Trans>Advanced</Trans>
-                    </DropdownMenuHeader>
-                    <DropdownMenuSearchInput
-                      autoFocus
-                      value={searchInputValue}
-                      onChange={handleSearchInputChange}
-                    />
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItemsContainer hasMaxHeight>
-                      {filteredSystemObjects.map((option) => (
-                        <MenuItem
-                          key={option.value}
-                          LeftIcon={option.Icon}
-                          text={option.label}
-                          onClick={() => handleOptionClick(option.value)}
-                        />
-                      ))}
-                    </DropdownMenuItemsContainer>
-                  </DropdownContent>
-                ) : (
-                  <DropdownContent>
-                    <DropdownMenuSearchInput
-                      autoFocus
-                      value={searchInputValue}
-                      onChange={handleSearchInputChange}
-                    />
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItemsContainer hasMaxHeight>
-                      {filteredRegularObjects.map((option) => (
-                        <MenuItem
-                          key={option.value}
-                          LeftIcon={option.Icon}
-                          text={option.label}
-                          onClick={() => handleOptionClick(option.value)}
-                        />
-                      ))}
-                      {(!searchInputValue ||
-                        'advanced'.includes(
-                          searchInputValue.toLowerCase(),
-                        )) && (
-                        <MenuItem
-                          text="Advanced"
-                          LeftIcon={IconSettings}
-                          onClick={handleSystemObjectsClick}
-                          hasSubMenu
-                        />
-                      )}
-                    </DropdownMenuItemsContainer>
-                  </DropdownContent>
-                )}
+                      <DropdownMenuHeader
+                        StartComponent={
+                          <DropdownMenuHeaderLeftComponent
+                            onClick={handleBack}
+                            Icon={IconChevronLeft}
+                          />
+                        }
+                      >
+                        <Trans>Advanced</Trans>
+                      </DropdownMenuHeader>
+                      <DropdownMenuSearchInput
+                        autoFocus
+                        value={searchInputValue}
+                        onChange={handleSearchInputChange}
+                      />
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItemsContainer hasMaxHeight>
+                        {filteredSystemObjects.map((option) => (
+                          <MenuItem
+                            key={option.value}
+                            LeftIcon={option.Icon}
+                            text={option.label}
+                            onClick={() => handleOptionClick(option.value)}
+                          />
+                        ))}
+                      </DropdownMenuItemsContainer>
+                    </DropdownContent>
+                  ) : (
+                    <DropdownContent
+                      widthInPixels={GenericDropdownContentWidth.ExtraLarge}
+                    >
+                      <DropdownMenuSearchInput
+                        autoFocus
+                        value={searchInputValue}
+                        onChange={handleSearchInputChange}
+                      />
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItemsContainer hasMaxHeight>
+                        {filteredRegularObjects.map((option) => (
+                          <MenuItem
+                            key={option.value}
+                            LeftIcon={option.Icon}
+                            text={option.label}
+                            onClick={() => handleOptionClick(option.value)}
+                          />
+                        ))}
+                        {(!searchInputValue ||
+                          'advanced'.includes(
+                            searchInputValue.toLowerCase(),
+                          )) && (
+                          <MenuItem
+                            text="Advanced"
+                            LeftIcon={IconSettings}
+                            onClick={handleSystemObjectsClick}
+                            hasSubMenu
+                          />
+                        )}
+                      </DropdownMenuItemsContainer>
+                    </DropdownContent>
+                  ))}
               </>
             }
-            dropdownHotkeyScope={{ scope: SelectHotkeyScope.Select }}
+            dropdownOffset={{ y: parseInt(theme.spacing(1), 10) }}
           />
         </StyledRecordTypeSelectContainer>
-        {isDefined(selectedObjectMetadataItem) && isUpdateEvent && (
+        {isDefined(selectedObjectMetadataItem) && isFieldFilteringSupported && (
           <WorkflowFieldsMultiSelect
             label="Fields (Optional)"
             placeholder="Select specific fields to listen to"

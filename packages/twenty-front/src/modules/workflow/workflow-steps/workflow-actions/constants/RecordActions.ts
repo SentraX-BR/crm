@@ -1,4 +1,4 @@
-import { WorkflowActionType } from '@/workflow/types/Workflow';
+import { type WorkflowActionType } from '@/workflow/types/Workflow';
 
 export const RECORD_ACTIONS: Array<{
   label: string;
@@ -23,10 +23,9 @@ export const RECORD_ACTIONS: Array<{
     type: 'DELETE_RECORD',
     icon: 'IconTrash',
   },
-  // TODO: Add search records action
-  // {
-  //   label: 'Search Records',
-  //   type: 'FIND_RECORDS',
-  //   icon: 'IconSearch',
-  // },
+  {
+    label: 'Search Records',
+    type: 'FIND_RECORDS',
+    icon: 'IconSearch',
+  },
 ];

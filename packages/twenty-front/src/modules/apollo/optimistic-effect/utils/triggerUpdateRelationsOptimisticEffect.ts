@@ -2,16 +2,16 @@ import { triggerAttachRelationOptimisticEffect } from '@/apollo/optimistic-effec
 import { triggerDestroyRecordsOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerDestroyRecordsOptimisticEffect';
 import { triggerDetachRelationOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerDetachRelationOptimisticEffect';
 import { CORE_OBJECT_NAMES_TO_DELETE_ON_TRIGGER_RELATION_DETACH } from '@/apollo/types/coreObjectNamesToDeleteOnRelationDetach';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 import { isObjectRecordConnection } from '@/object-record/cache/utils/isObjectRecordConnection';
-import { RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
-import { RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
-import { ApolloCache } from '@apollo/client';
+import { type RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
+import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
+import { type ApolloCache } from '@apollo/client';
 import { isArray } from '@sniptt/guards';
+import { isDefined } from 'twenty-shared/utils';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 import { isDeeplyEqual } from '~/utils/isDeeplyEqual';
-import { isDefined } from 'twenty-shared/utils';
 
 type triggerUpdateRelationsOptimisticEffectArgs = {
   cache: ApolloCache<unknown>;
@@ -48,14 +48,13 @@ export const triggerUpdateRelationsOptimisticEffect = ({
         return;
       }
 
-      const relationDefinition =
-        fieldMetadataItemOnSourceRecord.relationDefinition;
+      const relation = fieldMetadataItemOnSourceRecord.relation;
 
-      if (!relationDefinition) {
+      if (!relation) {
         return;
       }
 
-      const { targetObjectMetadata, targetFieldMetadata } = relationDefinition;
+      const { targetObjectMetadata, targetFieldMetadata } = relation;
 
       const fullTargetObjectMetadataItem = objectMetadataItems.find(
         ({ nameSingular }) =>
@@ -94,7 +93,7 @@ export const triggerUpdateRelationsOptimisticEffect = ({
           return [];
         }
 
-        if (isObjectRecordConnection(relationDefinition, value)) {
+        if (isObjectRecordConnection(relation, value)) {
           return value.edges.map(({ node }) => node);
         }
 

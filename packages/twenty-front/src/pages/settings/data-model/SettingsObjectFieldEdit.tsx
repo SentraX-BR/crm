@@ -1,10 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import omit from 'lodash.omit';
 import pick from 'lodash.pick';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useParams } from 'react-router-dom';
-import { z } from 'zod';
+import { type z } from 'zod';
 
 import { useFieldMetadataItem } from '@/object-metadata/hooks/useFieldMetadataItem';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
@@ -20,24 +20,22 @@ import { SettingsDataModelFieldDescriptionForm } from '@/settings/data-model/fie
 import { SettingsDataModelFieldIconLabelForm } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldIconLabelForm';
 import { SettingsDataModelFieldSettingsFormCard } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldSettingsFormCard';
 import { settingsFieldFormSchema } from '@/settings/data-model/fields/forms/validation-schemas/settingsFieldFormSchema';
-import { SettingsFieldType } from '@/settings/data-model/types/SettingsFieldType';
-import { AppPath } from '@/types/AppPath';
-import { SettingsPath } from '@/types/SettingsPath';
-import { SnackBarVariant } from '@/ui/feedback/snack-bar-manager/components/SnackBar';
+import { type SettingsFieldType } from '@/settings/data-model/types/SettingsFieldType';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
+import { ApolloError } from '@apollo/client';
 import { useLingui } from '@lingui/react/macro';
-import { isDefined } from 'twenty-shared/utils';
+import { AppPath, SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath, isDefined } from 'twenty-shared/utils';
 import { H2Title, IconArchive, IconArchiveOff } from 'twenty-ui/display';
 import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
-import { getSettingsPath } from '~/utils/navigation/getSettingsPath';
 
 //TODO: fix this type
-type SettingsDataModelFieldEditFormValues = z.infer<
+export type SettingsDataModelFieldEditFormValues = z.infer<
   ReturnType<typeof settingsFieldFormSchema>
 > &
   any;
@@ -47,7 +45,7 @@ export const SettingsObjectFieldEdit = () => {
   const navigateApp = useNavigateApp();
   const { t } = useLingui();
 
-  const { enqueueSnackBar } = useSnackBar();
+  const { enqueueErrorSnackBar } = useSnackBar();
 
   const { objectNamePlural = '', fieldName = '' } = useParams();
   const { findObjectMetadataItemByNamePlural } =
@@ -59,8 +57,14 @@ export const SettingsObjectFieldEdit = () => {
   const { deactivateMetadataField, activateMetadataField } =
     useFieldMetadataItem();
 
+  const [newNameDuringSave, setNewNameDuringSave] = useState<string | null>(
+    null,
+  );
+
   const fieldMetadataItem = objectMetadataItem?.fields.find(
-    (fieldMetadataItem) => fieldMetadataItem.name === fieldName,
+    (fieldMetadataItem) =>
+      fieldMetadataItem.name === fieldName ||
+      fieldMetadataItem.name === newNameDuringSave,
   );
 
   const getRelationMetadata = useGetRelationMetadata();
@@ -85,6 +89,7 @@ export const SettingsObjectFieldEdit = () => {
   }, [navigateApp, objectMetadataItem, fieldMetadataItem]);
 
   const { isDirty, isValid, isSubmitting } = formConfig.formState;
+
   const canSave = isDirty && isValid && !isSubmitting;
 
   if (!isDefined(objectMetadataItem) || !isDefined(fieldMetadataItem)) {
@@ -100,6 +105,7 @@ export const SettingsObjectFieldEdit = () => {
     formValues: SettingsDataModelFieldEditFormValues,
   ) => {
     const { dirtyFields } = formConfig.formState;
+    setNewNameDuringSave(formValues.name);
 
     try {
       if (
@@ -129,19 +135,19 @@ export const SettingsObjectFieldEdit = () => {
           Object.keys(otherDirtyFields),
         );
 
-        navigateSettings(SettingsPath.ObjectDetail, {
-          objectNamePlural,
-        });
-
         await updateOneFieldMetadataItem({
           objectMetadataId: objectMetadataItem.id,
           fieldMetadataIdToUpdate: fieldMetadataItem.id,
           updatePayload: formattedInput,
         });
+
+        navigateSettings(SettingsPath.ObjectDetail, {
+          objectNamePlural,
+        });
       }
     } catch (error) {
-      enqueueSnackBar((error as Error).message, {
-        variant: SnackBarVariant.Error,
+      enqueueErrorSnackBar({
+        apolloError: error instanceof ApolloError ? error : undefined,
       });
     }
   };
@@ -187,6 +193,7 @@ export const SettingsObjectFieldEdit = () => {
           ]}
           actionButton={
             <SaveAndCancelButtons
+              isLoading={isSubmitting}
               isSaveDisabled={!canSave}
               isCancelDisabled={isSubmitting}
               onCancel={() =>
@@ -207,10 +214,7 @@ export const SettingsObjectFieldEdit = () => {
               <SettingsDataModelFieldIconLabelForm
                 fieldMetadataItem={fieldMetadataItem}
                 maxLength={FIELD_NAME_MAXIMUM_LENGTH}
-                canToggleSyncLabelWithName={
-                  fieldMetadataItem.type !== FieldMetadataType.RELATION &&
-                  fieldMetadataItem.isCustom === true
-                }
+                isCreationMode={false}
               />
             </Section>
             {
@@ -231,8 +235,9 @@ export const SettingsObjectFieldEdit = () => {
                         />
                       )}
                       <SettingsDataModelFieldSettingsFormCard
-                        fieldMetadataItem={fieldMetadataItem}
-                        objectMetadataItem={objectMetadataItem}
+                        fieldType={fieldMetadataItem.type}
+                        existingFieldMetadataId={fieldMetadataItem.id}
+                        objectNameSingular={objectMetadataItem.nameSingular}
                       />
                     </Section>
                   </>

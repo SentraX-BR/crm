@@ -1,27 +1,29 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { ConnectedAccountProvider } from 'twenty-shared/types';
 import { assertUnreachable } from 'twenty-shared/utils';
 
 import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
-import {
-  GoogleAPIRefreshAccessTokenService,
-  GoogleTokens,
-} from 'src/modules/connected-account/refresh-tokens-manager/drivers/google/services/google-api-refresh-access-token.service';
-import {
-  MicrosoftAPIRefreshAccessTokenService,
-  MicrosoftTokens,
-} from 'src/modules/connected-account/refresh-tokens-manager/drivers/microsoft/services/microsoft-api-refresh-tokens.service';
+import { GoogleAPIRefreshAccessTokenService } from 'src/modules/connected-account/refresh-tokens-manager/drivers/google/services/google-api-refresh-access-token.service';
+import { MicrosoftAPIRefreshAccessTokenService } from 'src/modules/connected-account/refresh-tokens-manager/drivers/microsoft/services/microsoft-api-refresh-tokens.service';
 import {
   ConnectedAccountRefreshAccessTokenException,
   ConnectedAccountRefreshAccessTokenExceptionCode,
 } from 'src/modules/connected-account/refresh-tokens-manager/exceptions/connected-account-refresh-tokens.exception';
-import { ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
+import { type ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
+import { isAxiosTemporaryError } from 'src/modules/messaging/message-import-manager/drivers/gmail/utils/is-axios-gaxios-error.util';
 
-export type ConnectedAccountTokens = GoogleTokens | MicrosoftTokens;
+export type ConnectedAccountTokens = {
+  accessToken: string;
+  refreshToken: string;
+};
 
 @Injectable()
 export class ConnectedAccountRefreshTokensService {
+  private readonly logger = new Logger(
+    ConnectedAccountRefreshTokensService.name,
+  );
+
   constructor(
     private readonly googleAPIRefreshAccessTokenService: GoogleAPIRefreshAccessTokenService,
     private readonly microsoftAPIRefreshAccessTokenService: MicrosoftAPIRefreshAccessTokenService,
@@ -31,7 +33,7 @@ export class ConnectedAccountRefreshTokensService {
   async refreshAndSaveTokens(
     connectedAccount: ConnectedAccountWorkspaceEntity,
     workspaceId: string,
-  ): Promise<string> {
+  ): Promise<ConnectedAccountTokens> {
     const refreshToken = connectedAccount.refreshToken;
 
     if (!refreshToken) {
@@ -47,23 +49,17 @@ export class ConnectedAccountRefreshTokensService {
       workspaceId,
     );
 
-    try {
-      const connectedAccountRepository =
-        await this.twentyORMManager.getRepository<ConnectedAccountWorkspaceEntity>(
-          'connectedAccount',
-        );
-
-      await connectedAccountRepository.update(
-        { id: connectedAccount.id },
-        connectedAccountTokens,
+    const connectedAccountRepository =
+      await this.twentyORMManager.getRepository<ConnectedAccountWorkspaceEntity>(
+        'connectedAccount',
       );
-    } catch (error) {
-      throw new Error(
-        `Error saving the new tokens for connected account ${connectedAccount.id} in workspace ${workspaceId}: ${error.message} `,
-      );
-    }
 
-    return connectedAccountTokens.accessToken;
+    await connectedAccountRepository.update(
+      { id: connectedAccount.id },
+      connectedAccountTokens,
+    );
+
+    return connectedAccountTokens;
   }
 
   async refreshTokens(
@@ -81,6 +77,11 @@ export class ConnectedAccountRefreshTokensService {
           return await this.microsoftAPIRefreshAccessTokenService.refreshTokens(
             refreshToken,
           );
+        case ConnectedAccountProvider.IMAP_SMTP_CALDAV:
+          throw new ConnectedAccountRefreshAccessTokenException(
+            `Token refresh is not supported for IMAP provider for connected account ${connectedAccount.id} in workspace ${workspaceId}`,
+            ConnectedAccountRefreshAccessTokenExceptionCode.REFRESH_ACCESS_TOKEN_FAILED,
+          );
         default:
           return assertUnreachable(
             connectedAccount.provider,
@@ -88,8 +89,32 @@ export class ConnectedAccountRefreshTokensService {
           );
       }
     } catch (error) {
+      if (error?.name === 'AggregateError') {
+        const firstError = error?.errors?.[0];
+
+        this.logger.log(firstError);
+
+        if (isAxiosTemporaryError(error)) {
+          throw new ConnectedAccountRefreshAccessTokenException(
+            `Error refreshing tokens for connected account ${connectedAccount.id.slice(0, 7)} in workspace ${workspaceId.slice(0, 7)}: ${firstError.code}`,
+            ConnectedAccountRefreshAccessTokenExceptionCode.TEMPORARY_NETWORK_ERROR,
+          );
+        }
+      }
+
+      if (isAxiosTemporaryError(error)) {
+        throw new ConnectedAccountRefreshAccessTokenException(
+          `Error refreshing tokens for connected account ${connectedAccount.id.slice(0, 7)} in workspace ${workspaceId.slice(0, 7)}: ${error.code}`,
+          ConnectedAccountRefreshAccessTokenExceptionCode.TEMPORARY_NETWORK_ERROR,
+        );
+      }
+
+      this.logger.log(
+        `Error while refreshing tokens on connected account ${connectedAccount.id.slice(0, 7)} in workspace ${workspaceId.slice(0, 7)}`,
+        error,
+      );
       throw new ConnectedAccountRefreshAccessTokenException(
-        `Error refreshing tokens for connected account ${connectedAccount.id} in workspace ${workspaceId}: ${error.message} ${error?.response?.data?.error_description}`,
+        `Error refreshing tokens for connected account ${connectedAccount.id.slice(0, 7)} in workspace ${workspaceId.slice(0, 7)}: ${error.message} ${error?.response?.data?.error_description}`,
         ConnectedAccountRefreshAccessTokenExceptionCode.REFRESH_ACCESS_TOKEN_FAILED,
       );
     }

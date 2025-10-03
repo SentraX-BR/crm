@@ -49,6 +49,13 @@
         "command": "NODE_ENV=development && nest start --watch"
       }
     },
+    "start:ci": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/twenty-server",
+        "command": "NODE_ENV=development && nest start"
+      }
+    },
     "start:debug": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
@@ -150,9 +157,15 @@
       "options": {
         "cwd": "packages/twenty-server",
         "commands": [
-          "nx typeorm -- migration:run -d src/database/typeorm/metadata/metadata.datasource",
           "nx typeorm -- migration:run -d src/database/typeorm/core/core.datasource"
         ]
+      }
+    },
+    "database:migrate:generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/twenty-server",
+        "command": "npx nx typeorm -- migration:generate src/database/typeorm/core/migrations/common/{args.migrationName} -d src/database/typeorm/core/core.datasource.ts"
       }
     },
     "database:migrate:revert": {
@@ -161,7 +174,6 @@
       "options": {
         "cwd": "packages/twenty-server",
         "commands": [
-          "nx typeorm -- migration:revert -d src/database/typeorm/metadata/metadata.datasource",
           "nx typeorm -- migration:revert -d src/database/typeorm/core/core.datasource"
         ]
       }
@@ -222,7 +234,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "{projectRoot}",
-        "command": "lingui extract --overwrite"
+        "command": "lingui extract --overwrite --clean"
       }
     },
     "lingui:compile": {

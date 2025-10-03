@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -10,15 +11,14 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import { ObjectMetadataInterface } from 'src/engine/metadata-modules/field-metadata/interfaces/object-metadata.interface';
-
-import { WorkspaceEntityDuplicateCriteria } from 'src/engine/api/graphql/workspace-query-builder/types/workspace-entity-duplicate-criteria.type';
+import { type WorkspaceEntityDuplicateCriteria } from 'src/engine/api/graphql/workspace-query-builder/types/workspace-entity-duplicate-criteria.type';
 import { DataSourceEntity } from 'src/engine/metadata-modules/data-source/data-source.entity';
 import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { IndexMetadataEntity } from 'src/engine/metadata-modules/index-metadata/index-metadata.entity';
-import { ObjectStandardOverridesDTO } from 'src/engine/metadata-modules/object-metadata/dtos/object-standard-overrides.dto';
+import { type ObjectStandardOverridesDTO } from 'src/engine/metadata-modules/object-metadata/dtos/object-standard-overrides.dto';
+import { FieldPermissionEntity } from 'src/engine/metadata-modules/object-permission/field-permission/field-permission.entity';
 import { ObjectPermissionEntity } from 'src/engine/metadata-modules/object-permission/object-permission.entity';
-import { RelationMetadataEntity } from 'src/engine/metadata-modules/relation-metadata/relation-metadata.entity';
+import { ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
 
 @Entity('objectMetadata')
 @Unique('IDX_OBJECT_METADATA_NAME_SINGULAR_WORKSPACE_ID_UNIQUE', [
@@ -29,12 +29,15 @@ import { RelationMetadataEntity } from 'src/engine/metadata-modules/relation-met
   'namePlural',
   'workspaceId',
 ])
-export class ObjectMetadataEntity implements ObjectMetadataInterface {
+export class ObjectMetadataEntity implements Required<ObjectMetadataEntity> {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ nullable: true, type: 'uuid' })
   standardId: string | null;
+
+  @Column({ nullable: true, type: 'uuid' })
+  applicationId: string | null;
 
   @Column({ nullable: false, type: 'uuid' })
   dataSourceId: string;
@@ -52,14 +55,17 @@ export class ObjectMetadataEntity implements ObjectMetadataInterface {
   labelPlural: string;
 
   @Column({ nullable: true, type: 'text' })
-  description: string;
+  description: string | null;
 
-  @Column({ nullable: true })
-  icon: string;
+  @Column({ nullable: true, type: 'varchar' })
+  icon: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  standardOverrides?: ObjectStandardOverridesDTO;
+  standardOverrides: ObjectStandardOverridesDTO | null;
 
+  /**
+   * @deprecated
+   */
   @Column({ nullable: false })
   targetTableName: string;
 
@@ -75,6 +81,9 @@ export class ObjectMetadataEntity implements ObjectMetadataInterface {
   @Column({ default: false })
   isSystem: boolean;
 
+  @Column({ default: false })
+  isUIReadOnly: boolean;
+
   @Column({ default: true })
   isAuditLogged: boolean;
 
@@ -82,16 +91,16 @@ export class ObjectMetadataEntity implements ObjectMetadataInterface {
   isSearchable: boolean;
 
   @Column({ type: 'jsonb', nullable: true })
-  duplicateCriteria?: WorkspaceEntityDuplicateCriteria[];
+  duplicateCriteria: WorkspaceEntityDuplicateCriteria[] | null;
 
-  @Column({ nullable: true })
-  shortcut: string;
-
-  @Column({ nullable: true, type: 'uuid' })
-  labelIdentifierFieldMetadataId?: string | null;
+  @Column({ nullable: true, type: 'varchar' })
+  shortcut: string | null;
 
   @Column({ nullable: true, type: 'uuid' })
-  imageIdentifierFieldMetadataId?: string | null;
+  labelIdentifierFieldMetadataId: string | null;
+
+  @Column({ nullable: true, type: 'uuid' })
+  imageIdentifierFieldMetadataId: string | null;
 
   @Column({ default: false })
   isLabelSyncedWithName: boolean;
@@ -110,24 +119,6 @@ export class ObjectMetadataEntity implements ObjectMetadataInterface {
   indexMetadatas: Relation<IndexMetadataEntity[]>;
 
   @OneToMany(
-    () => RelationMetadataEntity,
-    (relation: RelationMetadataEntity) => relation.fromObjectMetadata,
-    {
-      cascade: true,
-    },
-  )
-  fromRelations: Relation<RelationMetadataEntity[]>;
-
-  @OneToMany(
-    () => RelationMetadataEntity,
-    (relation: RelationMetadataEntity) => relation.toObjectMetadata,
-    {
-      cascade: true,
-    },
-  )
-  toRelations: Relation<RelationMetadataEntity[]>;
-
-  @OneToMany(
     () => FieldMetadataEntity,
     (field) => field.relationTargetObjectMetadataId,
   )
@@ -144,6 +135,13 @@ export class ObjectMetadataEntity implements ObjectMetadataInterface {
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
+  @ManyToOne(() => ApplicationEntity, (application) => application.objects, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'applicationId' })
+  application: Relation<ApplicationEntity> | null;
+
   @OneToMany(
     () => ObjectPermissionEntity,
     (objectPermission: ObjectPermissionEntity) =>
@@ -153,4 +151,13 @@ export class ObjectMetadataEntity implements ObjectMetadataInterface {
     },
   )
   objectPermissions: Relation<ObjectPermissionEntity[]>;
+
+  @OneToMany(
+    () => FieldPermissionEntity,
+    (fieldPermission: FieldPermissionEntity) => fieldPermission.objectMetadata,
+    {
+      cascade: true,
+    },
+  )
+  fieldPermissions: Relation<FieldPermissionEntity[]>;
 }

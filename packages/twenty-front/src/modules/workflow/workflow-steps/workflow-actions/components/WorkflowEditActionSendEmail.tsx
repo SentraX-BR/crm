@@ -1,29 +1,30 @@
 import { GMAIL_SEND_SCOPE } from '@/accounts/constants/GmailSendScope';
 import { MICROSOFT_SEND_SCOPE } from '@/accounts/constants/MicrosoftSendScope';
-import { ConnectedAccount } from '@/accounts/types/ConnectedAccount';
+import { type ConnectedAccount } from '@/accounts/types/ConnectedAccount';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
+import { SidePanelHeader } from '@/command-menu/components/SidePanelHeader';
 import { useCommandMenu } from '@/command-menu/hooks/useCommandMenu';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
-import { FormTextFieldInput } from '@/object-record/record-field/form-types/components/FormTextFieldInput';
+import { FormTextFieldInput } from '@/object-record/record-field/ui/form-types/components/FormTextFieldInput';
 import { useTriggerApisOAuth } from '@/settings/accounts/hooks/useTriggerApiOAuth';
-import { SettingsPath } from '@/types/SettingsPath';
 import { Select } from '@/ui/input/components/Select';
-import { useRecoilComponentValueV2 } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValueV2';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
+import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
 import { workflowVisualizerWorkflowIdComponentState } from '@/workflow/states/workflowVisualizerWorkflowIdComponentState';
-import { WorkflowSendEmailAction } from '@/workflow/types/Workflow';
+import { type WorkflowSendEmailAction } from '@/workflow/types/Workflow';
+import { WorkflowActionFooter } from '@/workflow/workflow-steps/components/WorkflowActionFooter';
 import { WorkflowStepBody } from '@/workflow/workflow-steps/components/WorkflowStepBody';
-import { WorkflowStepHeader } from '@/workflow/workflow-steps/components/WorkflowStepHeader';
-import { useActionHeaderTypeOrThrow } from '@/workflow/workflow-steps/workflow-actions/hooks/useActionHeaderTypeOrThrow';
-import { useActionIconColorOrThrow } from '@/workflow/workflow-steps/workflow-actions/hooks/useActionIconColorOrThrow';
-import { getActionIcon } from '@/workflow/workflow-steps/workflow-actions/utils/getActionIcon';
+import { WorkflowSendEmailBody } from '@/workflow/workflow-steps/workflow-actions/email-action/components/WorkflowSendEmailBody';
+import { useWorkflowActionHeader } from '@/workflow/workflow-steps/workflow-actions/hooks/useWorkflowActionHeader';
 import { WorkflowVariablePicker } from '@/workflow/workflow-variables/components/WorkflowVariablePicker';
+import { useTheme } from '@emotion/react';
 import { useEffect, useState } from 'react';
 import { useRecoilValue } from 'recoil';
-import { ConnectedAccountProvider } from 'twenty-shared/types';
+import { ConnectedAccountProvider, SettingsPath } from 'twenty-shared/types';
 import { assertUnreachable, isDefined } from 'twenty-shared/utils';
 import { IconPlus, useIcons } from 'twenty-ui/display';
-import { SelectOption } from 'twenty-ui/input';
-import { JsonValue } from 'type-fest';
+import { type SelectOption } from 'twenty-ui/input';
+import { type JsonValue } from 'type-fest';
 import { useDebouncedCallback } from 'use-debounce';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 
@@ -50,11 +51,12 @@ export const WorkflowEditActionSendEmail = ({
   action,
   actionOptions,
 }: WorkflowEditActionSendEmailProps) => {
+  const theme = useTheme();
   const { getIcon } = useIcons();
   const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
   const { triggerApisOAuth } = useTriggerApisOAuth();
 
-  const workflowVisualizerWorkflowId = useRecoilComponentValueV2(
+  const workflowVisualizerWorkflowId = useRecoilComponentValue(
     workflowVisualizerWorkflowIdComponentState,
   );
   const redirectUrl = `/object/workflow/${workflowVisualizerWorkflowId}`;
@@ -87,6 +89,8 @@ export const WorkflowEditActionSendEmail = ({
           return scopes.some((scope) => scope === GMAIL_SEND_SCOPE);
         case ConnectedAccountProvider.MICROSOFT:
           return scopes.some((scope) => scope === MICROSOFT_SEND_SCOPE);
+        case ConnectedAccountProvider.IMAP_SMTP_CALDAV:
+          return isDefined(connectedAccount.connectionParameters?.SMTP);
         default:
           assertUnreachable(
             connectedAccount.provider,
@@ -95,7 +99,10 @@ export const WorkflowEditActionSendEmail = ({
       }
     };
 
-    if (!isDefined(scopes) || !hasSendScope(connectedAccount, scopes)) {
+    if (
+      connectedAccount.provider !== ConnectedAccountProvider.IMAP_SMTP_CALDAV &&
+      (!isDefined(scopes) || !hasSendScope(connectedAccount, scopes))
+    ) {
       await triggerApisOAuth(connectedAccount.provider, {
         redirectLocation: redirectUrl,
         loginHint: connectedAccount.handle,
@@ -177,6 +184,7 @@ export const WorkflowEditActionSendEmail = ({
       provider: true,
       scopes: true,
       accountOwnerId: true,
+      connectionParameters: true,
     },
   });
 
@@ -184,6 +192,13 @@ export const WorkflowEditActionSendEmail = ({
   const connectedAccountOptions: SelectOption<string | null>[] = [];
 
   accounts.forEach((account) => {
+    if (
+      account.provider === ConnectedAccountProvider.IMAP_SMTP_CALDAV &&
+      !isDefined(account.connectionParameters?.SMTP)
+    ) {
+      return;
+    }
+
     const selectOption = {
       label: account.handle,
       value: account.id,
@@ -197,18 +212,20 @@ export const WorkflowEditActionSendEmail = ({
     }
   });
 
-  const headerTitle = isDefined(action.name) ? action.name : 'Send Email';
-  const headerIcon = getActionIcon(action.type);
-  const headerIconColor = useActionIconColorOrThrow(action.type);
-  const headerType = useActionHeaderTypeOrThrow(action.type);
+  const { headerTitle, headerIcon, headerIconColor, headerType } =
+    useWorkflowActionHeader({
+      action,
+      defaultTitle: 'Send Email',
+    });
 
   const navigate = useNavigateSettings();
 
   const { closeCommandMenu } = useCommandMenu();
+
   return (
     !loading && (
       <>
-        <WorkflowStepHeader
+        <SidePanelHeader
           onTitleChange={(newName: string) => {
             if (actionOptions.readonly === true) {
               return;
@@ -245,6 +262,8 @@ export const WorkflowEditActionSendEmail = ({
               handleFieldChange('connectedAccountId', connectedAccountId);
             }}
             disabled={actionOptions.readonly}
+            dropdownOffset={{ y: parseInt(theme.spacing(1), 10) }}
+            dropdownWidth={GenericDropdownContentWidth.ExtraLarge}
           />
           <FormTextFieldInput
             label="Email"
@@ -266,7 +285,8 @@ export const WorkflowEditActionSendEmail = ({
             }}
             VariablePicker={WorkflowVariablePicker}
           />
-          <FormTextFieldInput
+          <WorkflowSendEmailBody
+            action={action}
             label="Body"
             placeholder="Enter email body"
             readonly={actionOptions.readonly}
@@ -275,9 +295,9 @@ export const WorkflowEditActionSendEmail = ({
               handleFieldChange('body', body);
             }}
             VariablePicker={WorkflowVariablePicker}
-            multiline
           />
         </WorkflowStepBody>
+        {!actionOptions.readonly && <WorkflowActionFooter stepId={action.id} />}
       </>
     )
   );

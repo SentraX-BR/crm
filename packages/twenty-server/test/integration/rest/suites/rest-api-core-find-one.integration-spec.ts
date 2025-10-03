@@ -3,7 +3,10 @@ import {
   NOT_EXISTING_TEST_PERSON_ID,
   TEST_PERSON_1_ID,
 } from 'test/integration/constants/test-person-ids.constants';
-import { TEST_PRIMARY_LINK_URL } from 'test/integration/constants/test-primary-link-url.constant';
+import {
+  TEST_PRIMARY_LINK_URL,
+  TEST_PRIMARY_LINK_URL_WIITHOUT_TRAILING_SLASH,
+} from 'test/integration/constants/test-primary-link-url.constant';
 import { makeRestAPIRequest } from 'test/integration/rest/utils/make-rest-api-request.util';
 import { deleteAllRecords } from 'test/integration/utils/delete-all-records';
 import { generateRecordName } from 'test/integration/utils/generate-record-name';
@@ -106,29 +109,16 @@ describe('Core REST API Find One endpoint', () => {
 
         expect(person.company).toBeDefined();
         expect(person.company.domainName.primaryLinkUrl).toBe(
-          TEST_PRIMARY_LINK_URL,
+          TEST_PRIMARY_LINK_URL_WIITHOUT_TRAILING_SLASH,
         );
         expect(person.company.people).not.toBeDefined();
       });
   });
 
-  it('should support depth 2 parameter', async () => {
+  it('should not support depth 2 parameter', async () => {
     await makeRestAPIRequest({
       method: 'get',
       path: `/people/${TEST_PERSON_1_ID}?depth=2`,
-    })
-      .expect(200)
-      .expect((res) => {
-        const person = res.body.data.person;
-
-        expect(person.company.people).toBeDefined();
-
-        const depth2Person = person.company.people.find(
-          // @ts-expect-error legacy noImplicitAny
-          (p) => p.id === person.id,
-        );
-
-        expect(depth2Person).toBeDefined();
-      });
+    }).expect(400);
   });
 });

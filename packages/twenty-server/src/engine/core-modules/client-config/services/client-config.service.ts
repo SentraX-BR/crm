@@ -1,9 +1,20 @@
 import { Injectable } from '@nestjs/common';
 
+import { isNonEmptyString } from '@sniptt/guards';
+
 import { NodeEnvironment } from 'src/engine/core-modules/twenty-config/interfaces/node-environment.interface';
 import { SupportDriver } from 'src/engine/core-modules/twenty-config/interfaces/support.interface';
 
-import { ClientConfig } from 'src/engine/core-modules/client-config/client-config.entity';
+import {
+  AI_MODELS,
+  ModelProvider,
+} from 'src/engine/core-modules/ai/constants/ai-models.const';
+import { AiModelRegistryService } from 'src/engine/core-modules/ai/services/ai-model-registry.service';
+import { convertCentsToBillingCredits } from 'src/engine/core-modules/ai/utils/convert-cents-to-billing-credits.util';
+import {
+  type ClientAIModelConfig,
+  type ClientConfig,
+} from 'src/engine/core-modules/client-config/client-config.entity';
 import { DomainManagerService } from 'src/engine/core-modules/domain-manager/services/domain-manager.service';
 import { PUBLIC_FEATURE_FLAGS } from 'src/engine/core-modules/feature-flag/constants/public-feature-flag.const';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
@@ -13,13 +24,55 @@ export class ClientConfigService {
   constructor(
     private twentyConfigService: TwentyConfigService,
     private domainManagerService: DomainManagerService,
+    private aiModelRegistryService: AiModelRegistryService,
   ) {}
 
   async getClientConfig(): Promise<ClientConfig> {
     const captchaProvider = this.twentyConfigService.get('CAPTCHA_DRIVER');
     const supportDriver = this.twentyConfigService.get('SUPPORT_DRIVER');
+    const calendarBookingPageId = this.twentyConfigService.get(
+      'CALENDAR_BOOKING_PAGE_ID',
+    );
+
+    const availableModels = this.aiModelRegistryService.getAvailableModels();
+
+    const aiModels: ClientAIModelConfig[] = availableModels.map(
+      (registeredModel) => {
+        const builtInModel = AI_MODELS.find(
+          (m) => m.modelId === registeredModel.modelId,
+        );
+
+        return {
+          modelId: registeredModel.modelId,
+          label: builtInModel?.label || registeredModel.modelId,
+          provider: registeredModel.provider,
+          nativeCapabilities: builtInModel?.nativeCapabilities,
+          inputCostPer1kTokensInCredits: builtInModel
+            ? convertCentsToBillingCredits(
+                builtInModel.inputCostPer1kTokensInCents,
+              )
+            : 0,
+          outputCostPer1kTokensInCredits: builtInModel
+            ? convertCentsToBillingCredits(
+                builtInModel.outputCostPer1kTokensInCents,
+              )
+            : 0,
+        };
+      },
+    );
+
+    if (aiModels.length > 0) {
+      aiModels.unshift({
+        modelId: 'auto',
+        label: 'Auto',
+        provider: ModelProvider.NONE,
+        inputCostPer1kTokensInCredits: 0,
+        outputCostPer1kTokensInCredits: 0,
+      });
+    }
 
     const clientConfig: ClientConfig = {
+      appVersion: this.twentyConfigService.get('APP_VERSION'),
       billing: {
         isBillingEnabled: this.twentyConfigService.get('IS_BILLING_ENABLED'),
         billingUrl: this.twentyConfigService.get('BILLING_PLAN_REQUIRED_LINK'),
@@ -38,6 +91,7 @@ export class ClientConfigService {
           },
         ],
       },
+      aiModels,
       authProviders: {
         google: this.twentyConfigService.get('AUTH_GOOGLE_ENABLED'),
         magicLink: false,
@@ -102,6 +156,12 @@ export class ClientConfigService {
       isConfigVariablesInDbEnabled: this.twentyConfigService.get(
         'IS_CONFIG_VARIABLES_IN_DB_ENABLED',
       ),
+      isImapSmtpCaldavEnabled: this.twentyConfigService.get(
+        'IS_IMAP_SMTP_CALDAV_ENABLED',
+      ),
+      calendarBookingPageId: isNonEmptyString(calendarBookingPageId)
+        ? calendarBookingPageId
+        : undefined,
     };
 
     return clientConfig;

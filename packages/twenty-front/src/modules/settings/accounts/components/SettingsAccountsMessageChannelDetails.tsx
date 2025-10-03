@@ -1,18 +1,24 @@
 import styled from '@emotion/styled';
 
 import {
-  MessageChannel,
-  MessageChannelContactAutoCreationPolicy,
+  type MessageChannel,
+  type MessageChannelContactAutoCreationPolicy,
+  type MessageFolderImportPolicy,
 } from '@/accounts/types/MessageChannel';
 import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { SettingsAccountsMessageAutoCreationCard } from '@/settings/accounts/components/SettingsAccountsMessageAutoCreationCard';
+import { SettingsAccountsMessageFolderCard } from '@/settings/accounts/components/SettingsAccountsMessageFolderCard';
 import { SettingsAccountsMessageVisibilityCard } from '@/settings/accounts/components/SettingsAccountsMessageVisibilityCard';
 import { SettingsOptionCardContentToggle } from '@/settings/components/SettingsOptions/SettingsOptionCardContentToggle';
-import { MessageChannelVisibility } from '~/generated-metadata/graphql';
+import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
 import { t } from '@lingui/core/macro';
-import { Card, Section } from 'twenty-ui/layout';
 import { H2Title, IconBriefcase, IconUsers } from 'twenty-ui/display';
+import { Card, Section } from 'twenty-ui/layout';
+import {
+  FeatureFlagKey,
+  type MessageChannelVisibility,
+} from '~/generated-metadata/graphql';
 
 type SettingsAccountsMessageChannelDetailsProps = {
   messageChannel: Pick<
@@ -23,6 +29,8 @@ type SettingsAccountsMessageChannelDetailsProps = {
     | 'excludeNonProfessionalEmails'
     | 'excludeGroupEmails'
     | 'isSyncEnabled'
+    | 'messageFolders'
+    | 'messageFolderImportPolicy'
   >;
 };
 
@@ -38,6 +46,10 @@ export const SettingsAccountsMessageChannelDetails = ({
   const { updateOneRecord } = useUpdateOneRecord<MessageChannel>({
     objectNameSingular: CoreObjectNameSingular.MessageChannel,
   });
+
+  const isFolderControlEnabled = useIsFeatureEnabled(
+    FeatureFlagKey.IS_MESSAGE_FOLDER_CONTROL_ENABLED,
+  );
 
   const handleVisibilityChange = (value: MessageChannelVisibility) => {
     updateOneRecord({
@@ -77,8 +89,29 @@ export const SettingsAccountsMessageChannelDetails = ({
     });
   };
 
+  const handleMessageFolderImportPolicyChange = (
+    value: MessageFolderImportPolicy,
+  ) => {
+    updateOneRecord({
+      idToUpdate: messageChannel.id,
+      updateOneRecordInput: { messageFolderImportPolicy: value },
+    });
+  };
+
   return (
     <StyledDetailsContainer>
+      {isFolderControlEnabled && messageChannel.messageFolders && (
+        <Section>
+          <H2Title
+            title={t`Import`}
+            description={t`Emails from the blocklist will be ignored. Manage blocklist on the “Accounts” setting page.`}
+          />
+          <SettingsAccountsMessageFolderCard
+            onChange={handleMessageFolderImportPolicyChange}
+            value={messageChannel.messageFolderImportPolicy}
+          />
+        </Section>
+      )}
       <Section>
         <H2Title
           title={t`Visibility`}

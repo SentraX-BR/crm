@@ -31,10 +31,13 @@ export enum MessageChannelSyncStatus {
 }
 
 export enum MessageChannelSyncStage {
-  FULL_MESSAGE_LIST_FETCH_PENDING = 'FULL_MESSAGE_LIST_FETCH_PENDING',
-  PARTIAL_MESSAGE_LIST_FETCH_PENDING = 'PARTIAL_MESSAGE_LIST_FETCH_PENDING',
+  FULL_MESSAGE_LIST_FETCH_PENDING = 'FULL_MESSAGE_LIST_FETCH_PENDING', // WILL BE DEPRECATED
+  PARTIAL_MESSAGE_LIST_FETCH_PENDING = 'PARTIAL_MESSAGE_LIST_FETCH_PENDING', // DEPRECATED
+  MESSAGE_LIST_FETCH_PENDING = 'MESSAGE_LIST_FETCH_PENDING',
+  MESSAGE_LIST_FETCH_SCHEDULED = 'MESSAGE_LIST_FETCH_SCHEDULED',
   MESSAGE_LIST_FETCH_ONGOING = 'MESSAGE_LIST_FETCH_ONGOING',
   MESSAGES_IMPORT_PENDING = 'MESSAGES_IMPORT_PENDING',
+  MESSAGES_IMPORT_SCHEDULED = 'MESSAGES_IMPORT_SCHEDULED',
   MESSAGES_IMPORT_ONGOING = 'MESSAGES_IMPORT_ONGOING',
   FAILED = 'FAILED',
 }
@@ -56,6 +59,11 @@ export enum MessageChannelContactAutoCreationPolicy {
   NONE = 'NONE',
 }
 
+export enum MessageFolderImportPolicy {
+  ALL_FOLDERS = 'ALL_FOLDERS',
+  SELECTED_FOLDERS = 'SELECTED_FOLDERS',
+}
+
 registerEnumType(MessageChannelVisibility, {
   name: 'MessageChannelVisibility',
 });
@@ -74,6 +82,10 @@ registerEnumType(MessageChannelType, {
 
 registerEnumType(MessageChannelContactAutoCreationPolicy, {
   name: 'MessageChannelContactAutoCreationPolicy',
+});
+
+registerEnumType(MessageFolderImportPolicy, {
+  name: 'MessageFolderImportPolicy',
 });
 
 @WorkspaceEntity({
@@ -193,6 +205,30 @@ export class MessageChannelWorkspaceEntity extends BaseWorkspaceEntity {
   contactAutoCreationPolicy: MessageChannelContactAutoCreationPolicy;
 
   @WorkspaceField({
+    standardId: MESSAGE_CHANNEL_STANDARD_FIELD_IDS.messageFolderImportPolicy,
+    type: FieldMetadataType.SELECT,
+    label: msg`Message folder import policy`,
+    description: msg`Message folder import policy`,
+    icon: 'IconFolder',
+    options: [
+      {
+        value: MessageFolderImportPolicy.ALL_FOLDERS,
+        label: 'All folders',
+        position: 0,
+        color: 'green',
+      },
+      {
+        value: MessageFolderImportPolicy.SELECTED_FOLDERS,
+        label: 'Selected folders',
+        position: 1,
+        color: 'blue',
+      },
+    ],
+    defaultValue: `'${MessageFolderImportPolicy.SELECTED_FOLDERS}'`,
+  })
+  messageFolderImportPolicy: MessageFolderImportPolicy;
+
+  @WorkspaceField({
     standardId: MESSAGE_CHANNEL_STANDARD_FIELD_IDS.excludeNonProfessionalEmails,
     type: FieldMetadataType.BOOLEAN,
     label: msg`Exclude non professional emails`,
@@ -291,16 +327,16 @@ export class MessageChannelWorkspaceEntity extends BaseWorkspaceEntity {
     icon: 'IconStatusChange',
     options: [
       {
-        value: MessageChannelSyncStage.FULL_MESSAGE_LIST_FETCH_PENDING,
-        label: 'Full messages list fetch pending',
+        value: MessageChannelSyncStage.MESSAGE_LIST_FETCH_PENDING,
+        label: 'Messages list fetch pending',
         position: 0,
         color: 'blue',
       },
       {
-        value: MessageChannelSyncStage.PARTIAL_MESSAGE_LIST_FETCH_PENDING,
-        label: 'Partial messages list fetch pending',
+        value: MessageChannelSyncStage.MESSAGE_LIST_FETCH_SCHEDULED,
+        label: 'Messages list fetch scheduled',
         position: 1,
-        color: 'blue',
+        color: 'green',
       },
       {
         value: MessageChannelSyncStage.MESSAGE_LIST_FETCH_ONGOING,
@@ -315,16 +351,34 @@ export class MessageChannelWorkspaceEntity extends BaseWorkspaceEntity {
         color: 'blue',
       },
       {
+        value: MessageChannelSyncStage.MESSAGES_IMPORT_SCHEDULED,
+        label: 'Messages import scheduled',
+        position: 4,
+        color: 'green',
+      },
+      {
         value: MessageChannelSyncStage.MESSAGES_IMPORT_ONGOING,
         label: 'Messages import ongoing',
-        position: 4,
+        position: 5,
         color: 'orange',
       },
       {
         value: MessageChannelSyncStage.FAILED,
         label: 'Failed',
-        position: 5,
+        position: 6,
         color: 'red',
+      },
+      {
+        value: MessageChannelSyncStage.FULL_MESSAGE_LIST_FETCH_PENDING, // WILL BE DEPRECATED
+        label: 'Full messages list fetch pending',
+        position: 7,
+        color: 'blue',
+      },
+      {
+        value: MessageChannelSyncStage.PARTIAL_MESSAGE_LIST_FETCH_PENDING, // DEPRECATED
+        label: 'Partial messages list fetch pending',
+        position: 8,
+        color: 'blue',
       },
     ],
     defaultValue: `'${MessageChannelSyncStage.FULL_MESSAGE_LIST_FETCH_PENDING}'`,

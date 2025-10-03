@@ -1,9 +1,9 @@
-import { MockedResponse } from '@apollo/client/testing';
+import { type MockedResponse } from '@apollo/client/testing';
 import { act, renderHook } from '@testing-library/react';
 import gql from 'graphql-tag';
 
 import { useCompleteTask } from '@/activities/tasks/hooks/useCompleteTask';
-import { Task } from '@/activities/types/Task';
+import { type Task } from '@/activities/types/Task';
 import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 
 const task: Task = {
@@ -43,6 +43,7 @@ const mocks: MockedResponse[] = [
                 firstName
                 lastName
               }
+              position
               timeFormat
               timeZone
               updatedAt
@@ -65,6 +66,7 @@ const mocks: MockedResponse[] = [
                   opportunityId
                   personId
                   petId
+                  rocketId
                   surveyResultId
                   taskId
                   type
@@ -72,7 +74,10 @@ const mocks: MockedResponse[] = [
                 }
               }
             }
-            body
+            bodyV2 {
+              blocknote
+              markdown
+            }
             createdAt
             createdBy {
               source
@@ -97,6 +102,7 @@ const mocks: MockedResponse[] = [
                   personId
                   petId
                   position
+                  rocketId
                   surveyResultId
                   taskId
                   updatedAt
@@ -121,6 +127,7 @@ const mocks: MockedResponse[] = [
                   opportunityId
                   personId
                   petId
+                  rocketId
                   surveyResultId
                   taskId
                   updatedAt
@@ -145,6 +152,7 @@ const mocks: MockedResponse[] = [
                   personId
                   petId
                   properties
+                  rocketId
                   surveyResultId
                   taskId
                   updatedAt
@@ -169,17 +177,30 @@ const mocks: MockedResponse[] = [
       data: {
         updateTask: {
           __typename: 'Task',
-          createdAt: '2024-03-15T07:33:14.212Z',
-          reminderAt: null,
-          authorId: '123',
-          title: 'Test',
-          status: 'DONE',
-          updatedAt: '2024-03-15T07:33:14.212Z',
-          body: 'Test',
-          dueAt: '2024-03-15T07:33:14.212Z',
-          type: 'TASK',
-          id: '123',
+          assignee: null,
           assigneeId: '123',
+          attachments: { edges: [] },
+          bodyV2: {
+            blocknote: 'Test',
+            markdown: 'Test',
+          },
+          createdAt: '2024-03-15T07:33:14.212Z',
+          createdBy: {
+            source: 'MANUAL',
+            workspaceMemberId: '123',
+            name: 'Test User',
+            context: 'test',
+          },
+          deletedAt: null,
+          dueAt: '2024-03-15T07:33:14.212Z',
+          favorites: { edges: [] },
+          id: '123',
+          position: 1,
+          status: 'DONE',
+          taskTargets: { edges: [] },
+          timelineActivities: { edges: [] },
+          title: 'Test',
+          updatedAt: '2024-03-15T07:33:14.212Z',
         },
       },
     })),

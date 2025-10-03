@@ -1,31 +1,52 @@
 import {
-  OnExecuteDoneHookResultOnNextHook,
-  Plugin,
   getDocumentString,
   handleStreamOrSingleExecutionResult,
+  type OnExecuteDoneHookResultOnNextHook,
+  type Plugin,
 } from '@envelop/core';
-import { GraphQLError, Kind, OperationDefinitionNode, print } from 'graphql';
+import { t } from '@lingui/core/macro';
+import {
+  GraphQLError,
+  Kind,
+  type OperationDefinitionNode,
+  print,
+} from 'graphql';
+import semver from 'semver';
+import { isDefined } from 'twenty-shared/utils';
 
-import { GraphQLContext } from 'src/engine/api/graphql/graphql-config/interfaces/graphql-context.interface';
+import { type GraphQLContext } from 'src/engine/api/graphql/graphql-config/interfaces/graphql-context.interface';
 
-import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
+import { type ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import { generateGraphQLErrorFromError } from 'src/engine/core-modules/graphql/utils/generate-graphql-error-from-error.util';
 import {
   BaseGraphQLError,
   convertGraphQLErrorToBaseGraphQLError,
+  ErrorCode,
 } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { shouldCaptureException } from 'src/engine/utils/global-exception-handler.util';
+import { type MetricsService } from 'src/engine/core-modules/metrics/metrics.service';
+import { MetricsKeys } from 'src/engine/core-modules/metrics/types/metrics-keys.type';
+import { type TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+import {
+  graphQLErrorCodesToFilter,
+  shouldCaptureException,
+} from 'src/engine/utils/global-exception-handler.util';
 
 const DEFAULT_EVENT_ID_KEY = 'exceptionEventId';
 const SCHEMA_VERSION_HEADER = 'x-schema-version';
-const SCHEMA_MISMATCH_ERROR =
-  'Your workspace has been updated with a new data model. Please refresh the page.';
+const SCHEMA_MISMATCH_ERROR = 'Schema version mismatch.';
+const APP_VERSION_HEADER = 'x-app-version';
+const APP_VERSION_MISMATCH_ERROR = 'App version mismatch.';
+const APP_VERSION_MISMATCH_CODE = 'APP_VERSION_MISMATCH';
 
 type GraphQLErrorHandlerHookOptions = {
+  metricsService: MetricsService;
+
   /**
    * The exception handler service to use.
    */
   exceptionHandlerService: ExceptionHandlerService;
+
+  twentyConfigService: TwentyConfigService;
   /**
    * The key of the event id in the error's extension. `null` to disable.
    * @default exceptionEventId
@@ -74,6 +95,11 @@ export const useGraphQLErrorHandlerHook = <
         'Anonymous Operation';
       const workspaceInfo = extractWorkspaceInfo(args.contextValue.req);
 
+      // eslint-disable-next-line no-console
+      console.log(
+        `[GQL Execute] Processing GQL query ${opName} on workspace ${workspaceInfo?.id}`,
+      );
+
       return {
         onExecuteDone(payload) {
           const handleResult: OnExecuteDoneHookResultOnNextHook<object> = ({
@@ -81,6 +107,10 @@ export const useGraphQLErrorHandlerHook = <
             setResult,
           }) => {
             if (!result.errors || result.errors.length === 0) {
+              options.metricsService.incrementCounter({
+                key: MetricsKeys.GraphqlOperation200,
+              });
+
               return;
             }
 
@@ -103,6 +133,48 @@ export const useGraphQLErrorHandlerHook = <
               }
 
               return originalError;
+            });
+
+            // Error metrics
+            const codeToMetricKey: Partial<Record<ErrorCode, MetricsKeys>> = {
+              [ErrorCode.UNAUTHENTICATED]: MetricsKeys.GraphqlOperation401,
+              [ErrorCode.FORBIDDEN]: MetricsKeys.GraphqlOperation403,
+              [ErrorCode.NOT_FOUND]: MetricsKeys.GraphqlOperation404,
+              [ErrorCode.INTERNAL_SERVER_ERROR]:
+                MetricsKeys.GraphqlOperation500,
+            };
+
+            const statusToMetricKey: Record<number, MetricsKeys> = {
+              400: MetricsKeys.GraphqlOperation400,
+              401: MetricsKeys.GraphqlOperation401,
+              403: MetricsKeys.GraphqlOperation403,
+              404: MetricsKeys.GraphqlOperation404,
+              500: MetricsKeys.GraphqlOperation500,
+            };
+
+            processedErrors.forEach((error) => {
+              let metricKey: MetricsKeys | undefined;
+
+              if (error instanceof BaseGraphQLError) {
+                const code = error.extensions?.code as ErrorCode;
+
+                metricKey = codeToMetricKey[code];
+                if (!metricKey && graphQLErrorCodesToFilter.includes(code)) {
+                  metricKey = MetricsKeys.GraphqlOperation400;
+                }
+              } else if (error instanceof GraphQLError) {
+                const status = error.extensions?.http?.status as number;
+
+                metricKey = statusToMetricKey[status];
+              }
+
+              if (metricKey) {
+                options.metricsService.incrementCounter({ key: metricKey });
+              } else {
+                options.metricsService.incrementCounter({
+                  key: MetricsKeys.GraphqlOperationUnknown,
+                });
+              }
             });
 
             // Step 2: Send errors to monitoring service (with stack traces)
@@ -137,11 +209,22 @@ export const useGraphQLErrorHandlerHook = <
             const transformedErrors = processedErrors.map((error) => {
               const graphqlError =
                 error instanceof BaseGraphQLError
-                  ? error
+                  ? {
+                      ...error,
+                      extensions: {
+                        ...error.extensions,
+                        userFriendlyMessage:
+                          error.extensions.userFriendlyMessage ??
+                          t`An error occurred.`,
+                      },
+                    }
                   : generateGraphQLErrorFromError(error);
 
               if (error.eventId && eventIdKey) {
-                graphqlError.extensions[eventIdKey] = error.eventId;
+                graphqlError.extensions = {
+                  ...graphqlError.extensions,
+                  [eventIdKey]: error.eventId,
+                };
               }
 
               return graphqlError;
@@ -165,12 +248,54 @@ export const useGraphQLErrorHandlerHook = <
         const headers = context.req.headers;
         const currentMetadataVersion = context.req.workspaceMetadataVersion;
         const requestMetadataVersion = headers[SCHEMA_VERSION_HEADER];
+        const backendAppVersion =
+          options.twentyConfigService.get('APP_VERSION');
+        const appVersionHeaderValue = headers[APP_VERSION_HEADER];
+        const frontEndAppVersion =
+          appVersionHeaderValue && Array.isArray(appVersionHeaderValue)
+            ? appVersionHeaderValue[0]
+            : appVersionHeaderValue;
 
         if (
           requestMetadataVersion &&
           requestMetadataVersion !== `${currentMetadataVersion}`
         ) {
-          throw new GraphQLError(SCHEMA_MISMATCH_ERROR);
+          options.metricsService.incrementCounter({
+            key: MetricsKeys.SchemaVersionMismatch,
+          });
+          throw new GraphQLError(SCHEMA_MISMATCH_ERROR, {
+            extensions: {
+              userFriendlyMessage: t`Your workspace has been updated with a new data model. Please refresh the page.`,
+            },
+          });
+        }
+
+        if (
+          !frontEndAppVersion ||
+          !backendAppVersion ||
+          !semver.valid(frontEndAppVersion) ||
+          !semver.valid(backendAppVersion)
+        ) {
+          return;
+        }
+
+        const frontEndMajor = semver.parse(frontEndAppVersion)?.major;
+        const backendMajor = semver.parse(backendAppVersion)?.major;
+
+        if (
+          isDefined(frontEndMajor) &&
+          isDefined(backendMajor) &&
+          frontEndMajor < backendMajor
+        ) {
+          options.metricsService.incrementCounter({
+            key: MetricsKeys.AppVersionMismatch,
+          });
+          throw new GraphQLError(APP_VERSION_MISMATCH_ERROR, {
+            extensions: {
+              code: APP_VERSION_MISMATCH_CODE,
+              userFriendlyMessage: t`Your app version is out of date. Please refresh the page to continue.`,
+            },
+          });
         }
       }
     },

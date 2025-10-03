@@ -1,5 +1,11 @@
 import { Field, ObjectType, registerEnumType } from '@nestjs/graphql';
 
+import { SupportDriver } from 'src/engine/core-modules/twenty-config/interfaces/support.interface';
+
+import {
+  ModelId,
+  ModelProvider,
+} from 'src/engine/core-modules/ai/constants/ai-models.const';
 import { BillingTrialPeriodDTO } from 'src/engine/core-modules/billing/dtos/billing-trial-period.dto';
 import { CaptchaDriverType } from 'src/engine/core-modules/captcha/interfaces';
 import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
@@ -8,6 +14,40 @@ import { AuthProviders } from 'src/engine/core-modules/workspace/dtos/public-wor
 registerEnumType(FeatureFlagKey, {
   name: 'FeatureFlagKey',
 });
+
+registerEnumType(ModelProvider, {
+  name: 'ModelProvider',
+});
+
+@ObjectType()
+class NativeModelCapabilities {
+  @Field(() => Boolean, { nullable: true })
+  webSearch?: boolean;
+
+  @Field(() => Boolean, { nullable: true })
+  twitterSearch?: boolean;
+}
+
+@ObjectType()
+export class ClientAIModelConfig {
+  @Field(() => String)
+  modelId: ModelId;
+
+  @Field(() => String)
+  label: string;
+
+  @Field(() => ModelProvider)
+  provider: ModelProvider;
+
+  @Field(() => Number)
+  inputCostPer1kTokensInCredits: number;
+
+  @Field(() => Number)
+  outputCostPer1kTokensInCredits: number;
+
+  @Field(() => NativeModelCapabilities, { nullable: true })
+  nativeCapabilities?: NativeModelCapabilities;
+}
 
 @ObjectType()
 class Billing {
@@ -23,8 +63,8 @@ class Billing {
 
 @ObjectType()
 class Support {
-  @Field(() => String)
-  supportDriver: string;
+  @Field(() => SupportDriver)
+  supportDriver: SupportDriver;
 
   @Field(() => String, { nullable: true })
   supportFrontChatId?: string;
@@ -80,11 +120,17 @@ class PublicFeatureFlag {
 
 @ObjectType()
 export class ClientConfig {
+  @Field(() => String, { nullable: true })
+  appVersion?: string;
+
   @Field(() => AuthProviders, { nullable: false })
   authProviders: AuthProviders;
 
   @Field(() => Billing, { nullable: false })
   billing: Billing;
+
+  @Field(() => [ClientAIModelConfig])
+  aiModels: ClientAIModelConfig[];
 
   @Field(() => Boolean)
   signInPrefilled: boolean;
@@ -145,4 +191,10 @@ export class ClientConfig {
 
   @Field(() => Boolean)
   isConfigVariablesInDbEnabled: boolean;
+
+  @Field(() => Boolean)
+  isImapSmtpCaldavEnabled: boolean;
+
+  @Field(() => String, { nullable: true })
+  calendarBookingPageId?: string;
 }

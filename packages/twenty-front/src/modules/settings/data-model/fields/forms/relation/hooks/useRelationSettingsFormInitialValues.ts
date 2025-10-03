@@ -1,21 +1,29 @@
 import { useMemo } from 'react';
 
+import { useFieldMetadataItemById } from '@/object-metadata/hooks/useFieldMetadataItemById';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
 import { useGetRelationMetadata } from '@/object-metadata/hooks/useGetRelationMetadata';
-import { FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 import { isObjectMetadataAvailableForRelation } from '@/object-metadata/utils/isObjectMetadataAvailableForRelation';
-import { SettingsDataModelFieldPreviewCardProps } from '@/settings/data-model/fields/preview/components/SettingsDataModelFieldPreviewCard';
 import { isDefined } from 'twenty-shared/utils';
-import { RelationDefinitionType } from '~/generated-metadata/graphql';
+import { RelationType } from '~/generated-metadata/graphql';
+
+type UseRelationSettingsFormInitialValuesProps = {
+  existingFieldMetadataId: string;
+  objectMetadataItem?: Pick<
+    ObjectMetadataItem,
+    'id' | 'icon' | 'labelSingular' | 'labelPlural'
+  >;
+};
 
 export const useRelationSettingsFormInitialValues = ({
-  fieldMetadataItem,
+  existingFieldMetadataId,
   objectMetadataItem,
-}: {
-  fieldMetadataItem?: Pick<FieldMetadataItem, 'type' | 'relationDefinition'>;
-  objectMetadataItem?: SettingsDataModelFieldPreviewCardProps['objectMetadataItem'];
-}) => {
+}: UseRelationSettingsFormInitialValuesProps) => {
   const { activeObjectMetadataItems } = useFilteredObjectMetadataItems();
+  const { fieldMetadataItem } = useFieldMetadataItemById(
+    existingFieldMetadataId,
+  );
 
   const getRelationMetadata = useGetRelationMetadata();
   const {
@@ -49,18 +57,16 @@ export const useRelationSettingsFormInitialValues = ({
   ]);
 
   const initialRelationType =
-    relationTypeFromFieldMetadata ?? RelationDefinitionType.ONE_TO_MANY;
+    relationTypeFromFieldMetadata ?? RelationType.ONE_TO_MANY;
 
   return {
     disableFieldEdition:
-      relationFieldMetadataItem && !relationFieldMetadataItem.isCustom,
+      isDefined(relationFieldMetadataItem) &&
+      relationFieldMetadataItem?.isCustom === true,
     disableRelationEdition: !!relationFieldMetadataItem,
     initialRelationFieldMetadataItem: relationFieldMetadataItem ?? {
       icon: initialRelationObjectMetadataItem.icon ?? 'IconUsers',
-      label: [
-        RelationDefinitionType.MANY_TO_MANY,
-        RelationDefinitionType.MANY_TO_ONE,
-      ].includes(initialRelationType)
+      label: [RelationType.MANY_TO_ONE].includes(initialRelationType)
         ? initialRelationObjectMetadataItem.labelPlural
         : initialRelationObjectMetadataItem.labelSingular,
     },

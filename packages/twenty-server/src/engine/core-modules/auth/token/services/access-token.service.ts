@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { addMilliseconds } from 'date-fns';
-import { Request } from 'express';
+import { type Request } from 'express';
 import ms from 'ms';
+import { assertIsDefinedOrThrow } from 'twenty-shared/utils';
 import { isWorkspaceActiveOrSuspended } from 'twenty-shared/workspace';
 import { Repository } from 'typeorm';
 
@@ -11,21 +12,23 @@ import {
   AuthException,
   AuthExceptionCode,
 } from 'src/engine/core-modules/auth/auth.exception';
-import { AuthToken } from 'src/engine/core-modules/auth/dto/token.entity';
+import { type AuthToken } from 'src/engine/core-modules/auth/dto/token.entity';
 import { JwtAuthStrategy } from 'src/engine/core-modules/auth/strategies/jwt.auth.strategy';
 import {
-  AuthContext,
-  JwtPayload,
+  type AccessTokenJwtPayload,
+  type AuthContext,
+  JwtTokenTypeEnum,
 } from 'src/engine/core-modules/auth/types/auth-context.type';
 import { JwtWrapperService } from 'src/engine/core-modules/jwt/services/jwt-wrapper.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { UserWorkspaceNotFoundDefaultError } from 'src/engine/core-modules/user-workspace/user-workspace.exception';
 import { User } from 'src/engine/core-modules/user/user.entity';
 import { userValidator } from 'src/engine/core-modules/user/user.validate';
 import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
-import { workspaceValidator } from 'src/engine/core-modules/workspace/workspace.validate';
+import { WorkspaceNotFoundDefaultError } from 'src/engine/core-modules/workspace/workspace.exception';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
-import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
+import { type WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 @Injectable()
 export class AccessTokenService {
@@ -33,19 +36,26 @@ export class AccessTokenService {
     private readonly jwtWrapperService: JwtWrapperService,
     private readonly jwtStrategy: JwtAuthStrategy,
     private readonly twentyConfigService: TwentyConfigService,
-    @InjectRepository(User, 'core')
+    @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    @InjectRepository(Workspace, 'core')
+    @InjectRepository(Workspace)
     private readonly workspaceRepository: Repository<Workspace>,
     private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
-    @InjectRepository(UserWorkspace, 'core')
+    @InjectRepository(UserWorkspace)
     private readonly userWorkspaceRepository: Repository<UserWorkspace>,
   ) {}
 
-  async generateAccessToken(
-    userId: string,
-    workspaceId: string,
-  ): Promise<AuthToken> {
+  async generateAccessToken({
+    userId,
+    workspaceId,
+    authProvider,
+    isImpersonating,
+    impersonatorUserWorkspaceId,
+    impersonatedUserWorkspaceId,
+  }: Omit<
+    AccessTokenJwtPayload,
+    'type' | 'workspaceMemberId' | 'userWorkspaceId' | 'sub'
+  >): Promise<AuthToken> {
     const expiresIn = this.twentyConfigService.get('ACCESS_TOKEN_EXPIRES_IN');
 
     const expiresAt = addMilliseconds(new Date().getTime(), ms(expiresIn));
@@ -65,16 +75,13 @@ export class AccessTokenService {
       where: { id: workspaceId },
     });
 
-    workspaceValidator.assertIsDefinedOrThrow(workspace);
+    assertIsDefinedOrThrow(workspace, WorkspaceNotFoundDefaultError);
 
     if (isWorkspaceActiveOrSuspended(workspace)) {
       const workspaceMemberRepository =
         await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkspaceMemberWorkspaceEntity>(
           workspaceId,
           'workspaceMember',
-          {
-            shouldFailIfMetadataNotFound: false,
-          },
         );
 
       const workspaceMember = await workspaceMemberRepository.findOne({
@@ -83,12 +90,13 @@ export class AccessTokenService {
         },
       });
 
-      if (!workspaceMember) {
-        throw new AuthException(
+      assertIsDefinedOrThrow(
+        workspaceMember,
+        new AuthException(
           'User is not a member of the workspace',
           AuthExceptionCode.FORBIDDEN_EXCEPTION,
-        );
-      }
+        ),
+      );
 
       tokenWorkspaceMemberId = workspaceMember.id;
     }
@@ -99,16 +107,32 @@ export class AccessTokenService {
       },
     });
 
-    const jwtPayload: JwtPayload = {
+    assertIsDefinedOrThrow(userWorkspace, UserWorkspaceNotFoundDefaultError);
+
+    const payloadImpersonatorUserWorkspaceId =
+      isImpersonating === true ? impersonatorUserWorkspaceId : undefined;
+    const payloadOriginalUserWorkspaceId =
+      isImpersonating === true ? impersonatedUserWorkspaceId : undefined;
+
+    const jwtPayload: AccessTokenJwtPayload = {
       sub: user.id,
+      userId: user.id,
       workspaceId,
       workspaceMemberId: tokenWorkspaceMemberId,
-      userWorkspaceId: userWorkspace?.id,
+      userWorkspaceId: userWorkspace.id,
+      type: JwtTokenTypeEnum.ACCESS,
+      authProvider,
+      isImpersonating: isImpersonating === true,
+      impersonatorUserWorkspaceId: payloadImpersonatorUserWorkspaceId,
+      impersonatedUserWorkspaceId: payloadOriginalUserWorkspaceId,
     };
 
     return {
       token: this.jwtWrapperService.sign(jwtPayload, {
-        secret: this.jwtWrapperService.generateAppSecret('ACCESS', workspaceId),
+        secret: this.jwtWrapperService.generateAppSecret(
+          JwtTokenTypeEnum.ACCESS,
+          workspaceId,
+        ),
         expiresIn,
       }),
       expiresAt,
@@ -116,14 +140,13 @@ export class AccessTokenService {
   }
 
   async validateToken(token: string): Promise<AuthContext> {
-    await this.jwtWrapperService.verifyWorkspaceToken(token, 'ACCESS');
+    await this.jwtWrapperService.verifyJwtToken(token, JwtTokenTypeEnum.ACCESS);
 
-    const decoded = await this.jwtWrapperService.decode(token);
+    const decoded = this.jwtWrapperService.decode<AccessTokenJwtPayload>(token);
 
-    const { user, apiKey, workspace, workspaceMemberId, userWorkspaceId } =
-      await this.jwtStrategy.validate(decoded as JwtPayload);
+    const context = await this.jwtStrategy.validate(decoded);
 
-    return { user, apiKey, workspace, workspaceMemberId, userWorkspaceId };
+    return context;
   }
 
   async validateTokenByRequest(request: Request): Promise<AuthContext> {

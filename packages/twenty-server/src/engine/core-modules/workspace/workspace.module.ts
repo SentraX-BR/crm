@@ -9,16 +9,26 @@ import { AuditModule } from 'src/engine/core-modules/audit/audit.module';
 import { TokenModule } from 'src/engine/core-modules/auth/token/token.module';
 import { BillingModule } from 'src/engine/core-modules/billing/billing.module';
 import { BillingSubscription } from 'src/engine/core-modules/billing/entities/billing-subscription.entity';
+import { WorkspaceManyOrAllFlatEntityMapsCacheModule } from 'src/engine/core-modules/common/services/workspace-many-or-all-flat-entity-maps-cache.module';
+import { DnsManagerModule } from 'src/engine/core-modules/dns-manager/dns-manager.module';
 import { DomainManagerModule } from 'src/engine/core-modules/domain-manager/domain-manager.module';
 import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
 import { FileUploadModule } from 'src/engine/core-modules/file/file-upload/file-upload.module';
 import { FileModule } from 'src/engine/core-modules/file/file.module';
 import { OnboardingModule } from 'src/engine/core-modules/onboarding/onboarding.module';
+import { PublicDomain } from 'src/engine/core-modules/public-domain/public-domain.entity';
 import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { UserWorkspaceModule } from 'src/engine/core-modules/user-workspace/user-workspace.module';
 import { User } from 'src/engine/core-modules/user/user.entity';
+import { CoreViewModule } from 'src/engine/core-modules/view/view.module';
+import { CheckCustomDomainValidRecordsCronCommand } from 'src/engine/core-modules/workspace/crons/commands/check-custom-domain-valid-records.cron.command';
+import { CheckCustomDomainValidRecordsCronJob } from 'src/engine/core-modules/workspace/crons/jobs/check-custom-domain-valid-records.cron.job';
+import { WorkspaceService } from 'src/engine/core-modules/workspace/services/workspace.service';
 import { WorkspaceWorkspaceMemberListener } from 'src/engine/core-modules/workspace/workspace-workspace-member.listener';
+import { workspaceAutoResolverOpts } from 'src/engine/core-modules/workspace/workspace.auto-resolver-opts';
+import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
 import { WorkspaceResolver } from 'src/engine/core-modules/workspace/workspace.resolver';
+import { AgentModule } from 'src/engine/metadata-modules/agent/agent.module';
 import { DataSourceModule } from 'src/engine/metadata-modules/data-source/data-source.module';
 import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permissions.module';
 import { RoleModule } from 'src/engine/metadata-modules/role/role.module';
@@ -26,27 +36,24 @@ import { WorkspaceMetadataCacheModule } from 'src/engine/metadata-modules/worksp
 import { WorkspaceCacheStorageModule } from 'src/engine/workspace-cache-storage/workspace-cache-storage.module';
 import { WorkspaceManagerModule } from 'src/engine/workspace-manager/workspace-manager.module';
 
-import { workspaceAutoResolverOpts } from './workspace.auto-resolver-opts';
-import { Workspace } from './workspace.entity';
-
-import { WorkspaceService } from './services/workspace.service';
-
 @Module({
   imports: [
     TypeORMModule,
-    TypeOrmModule.forFeature([BillingSubscription], 'core'),
+    TypeOrmModule.forFeature([BillingSubscription]),
     NestjsQueryGraphQLModule.forFeature({
       imports: [
-        DomainManagerModule,
+        AuditModule,
         BillingModule,
         FileModule,
         TokenModule,
         FileUploadModule,
         WorkspaceMetadataCacheModule,
-        NestjsQueryTypeOrmModule.forFeature(
-          [User, Workspace, UserWorkspace],
-          'core',
-        ),
+        NestjsQueryTypeOrmModule.forFeature([
+          User,
+          Workspace,
+          UserWorkspace,
+          PublicDomain,
+        ]),
         UserWorkspaceModule,
         WorkspaceManagerModule,
         FeatureFlagModule,
@@ -55,18 +62,24 @@ import { WorkspaceService } from './services/workspace.service';
         TypeORMModule,
         PermissionsModule,
         WorkspaceCacheStorageModule,
-        AuditModule,
         RoleModule,
+        AgentModule,
+        DnsManagerModule,
+        DomainManagerModule,
+        CoreViewModule,
+        WorkspaceManyOrAllFlatEntityMapsCacheModule,
       ],
       services: [WorkspaceService],
       resolvers: workspaceAutoResolverOpts,
     }),
   ],
-  exports: [WorkspaceService],
+  exports: [WorkspaceService, CheckCustomDomainValidRecordsCronCommand],
   providers: [
     WorkspaceResolver,
     WorkspaceService,
     WorkspaceWorkspaceMemberListener,
+    CheckCustomDomainValidRecordsCronCommand,
+    CheckCustomDomainValidRecordsCronJob,
   ],
 })
 export class WorkspaceModule {}

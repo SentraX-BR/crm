@@ -1,5 +1,6 @@
+import { COMMAND_MENU_DEFAULT_ICON } from '@/workflow/workflow-trigger/constants/CommandMenuDefaultIcon';
 import { DatabaseTriggerDefaultLabel } from '@/workflow/workflow-trigger/constants/DatabaseTriggerDefaultLabel';
-import { generatedMockObjectMetadataItems } from '~/testing/mock-data/generatedMockObjectMetadataItems';
+import { generatedMockObjectMetadataItems } from '~/testing/utils/generatedMockObjectMetadataItems';
 import { getTriggerDefaultDefinition } from '../getTriggerDefaultDefinition';
 
 describe('getTriggerDefaultDefinition', () => {
@@ -9,6 +10,7 @@ describe('getTriggerDefaultDefinition', () => {
         defaultLabel: DatabaseTriggerDefaultLabel.RECORD_IS_CREATED,
         type: 'DATABASE_EVENT',
         activeNonSystemObjectMetadataItems: [],
+        isIteratorEnabled: false,
       });
     }).toThrow();
   });
@@ -19,13 +21,18 @@ describe('getTriggerDefaultDefinition', () => {
         defaultLabel: DatabaseTriggerDefaultLabel.RECORD_IS_CREATED,
         type: 'DATABASE_EVENT',
         activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
       }),
     ).toStrictEqual({
       type: 'DATABASE_EVENT',
-      name: 'Record is Created',
+      name: 'Record is created',
       settings: {
         eventName: `${generatedMockObjectMetadataItems[0].nameSingular}.created`,
         outputSchema: {},
+      },
+      position: {
+        x: 0,
+        y: 0,
       },
     });
   });
@@ -36,13 +43,18 @@ describe('getTriggerDefaultDefinition', () => {
         defaultLabel: DatabaseTriggerDefaultLabel.RECORD_IS_UPDATED,
         type: 'DATABASE_EVENT',
         activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
       }),
     ).toStrictEqual({
       type: 'DATABASE_EVENT',
-      name: 'Record is Updated',
+      name: 'Record is updated',
       settings: {
         eventName: `${generatedMockObjectMetadataItems[0].nameSingular}.updated`,
         outputSchema: {},
+      },
+      position: {
+        x: 0,
+        y: 0,
       },
     });
   });
@@ -53,13 +65,18 @@ describe('getTriggerDefaultDefinition', () => {
         defaultLabel: DatabaseTriggerDefaultLabel.RECORD_IS_DELETED,
         type: 'DATABASE_EVENT',
         activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
       }),
     ).toStrictEqual({
       type: 'DATABASE_EVENT',
-      name: 'Record is Deleted',
+      name: 'Record is deleted',
       settings: {
         eventName: `${generatedMockObjectMetadataItems[0].nameSingular}.deleted`,
         outputSchema: {},
+      },
+      position: {
+        x: 0,
+        y: 0,
       },
     });
   });
@@ -70,13 +87,18 @@ describe('getTriggerDefaultDefinition', () => {
         defaultLabel: DatabaseTriggerDefaultLabel.RECORD_IS_CREATED,
         type: 'DATABASE_EVENT',
         activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
       }),
     ).toStrictEqual({
       type: 'DATABASE_EVENT',
-      name: 'Record is Created',
+      name: 'Record is created',
       settings: {
         eventName: `${generatedMockObjectMetadataItems[0].nameSingular}.created`,
         outputSchema: {},
+      },
+      position: {
+        x: 0,
+        y: 0,
       },
     });
   });
@@ -87,13 +109,70 @@ describe('getTriggerDefaultDefinition', () => {
         defaultLabel: 'Launch manually',
         type: 'MANUAL',
         activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
       }),
     ).toStrictEqual({
       type: 'MANUAL',
       name: 'Launch manually',
       settings: {
         objectType: generatedMockObjectMetadataItems[0].nameSingular,
+        availability: {
+          objectNameSingular: generatedMockObjectMetadataItems[0].nameSingular,
+          type: 'SINGLE_RECORD',
+        },
         outputSchema: {},
+        icon: COMMAND_MENU_DEFAULT_ICON,
+        isPinned: false,
+      },
+      position: {
+        x: 0,
+        y: 0,
+      },
+    });
+  });
+
+  it('returns a valid configuration for CRON trigger type', () => {
+    expect(
+      getTriggerDefaultDefinition({
+        defaultLabel: 'On a schedule',
+        type: 'CRON',
+        activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
+      }),
+    ).toStrictEqual({
+      type: 'CRON',
+      name: 'On a schedule',
+      settings: {
+        type: 'DAYS',
+        schedule: { day: 1, hour: 0, minute: 0 },
+        outputSchema: {},
+      },
+      position: {
+        x: 0,
+        y: 0,
+      },
+    });
+  });
+
+  it('returns a valid configuration for WEBHOOK trigger type', () => {
+    expect(
+      getTriggerDefaultDefinition({
+        defaultLabel: 'Webhook',
+        type: 'WEBHOOK',
+        activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
+      }),
+    ).toStrictEqual({
+      type: 'WEBHOOK',
+      name: 'Webhook',
+      settings: {
+        outputSchema: {},
+        httpMethod: 'GET',
+        authentication: null,
+      },
+      position: {
+        x: 0,
+        y: 0,
       },
     });
   });
@@ -104,6 +183,7 @@ describe('getTriggerDefaultDefinition', () => {
         defaultLabel: DatabaseTriggerDefaultLabel.RECORD_IS_CREATED,
         type: 'unknown' as any,
         activeNonSystemObjectMetadataItems: generatedMockObjectMetadataItems,
+        isIteratorEnabled: false,
       });
     }).toThrow('Unknown type: unknown');
   });

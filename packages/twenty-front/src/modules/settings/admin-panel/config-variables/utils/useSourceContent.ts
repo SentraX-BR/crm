@@ -1,5 +1,6 @@
 import { useTheme } from '@emotion/react';
 import { useLingui } from '@lingui/react/macro';
+import { CustomError } from 'twenty-shared/utils';
 
 import { ConfigSource } from '~/generated/graphql';
 
@@ -24,6 +25,6 @@ export const useSourceContent = (source: ConfigSource) => {
         color: theme.font.color.tertiary,
       };
     default:
-      throw new Error(`Unknown source: ${source}`);
+      throw new CustomError(`Unknown source: ${source}`, 'UNKNOWN_SOURCE');
   }
 };

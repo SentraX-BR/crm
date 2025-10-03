@@ -1,6 +1,6 @@
 import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
 import { CardType } from '@/object-record/record-show/types/CardType';
-import { RecordLayout } from '@/object-record/record-show/types/RecordLayout';
+import { type RecordLayout } from '@/object-record/record-show/types/RecordLayout';
 import {
   IconCheckbox,
   IconList,
@@ -44,6 +44,7 @@ export const BASE_RECORD_LAYOUT: RecordLayout = {
       Icon: IconCheckbox,
       position: 300,
       cards: [{ type: CardType.TaskCard }],
+      targetObjectNameSingular: CoreObjectNameSingular.Task,
       hide: {
         ifMobile: false,
         ifDesktop: false,
@@ -51,6 +52,7 @@ export const BASE_RECORD_LAYOUT: RecordLayout = {
         ifFeaturesDisabled: [],
         ifRequiredObjectsInactive: [CoreObjectNameSingular.Task],
         ifRelationsMissing: ['taskTargets'],
+        ifNoReadPermission: true,
       },
     },
     notes: {
@@ -58,6 +60,7 @@ export const BASE_RECORD_LAYOUT: RecordLayout = {
       Icon: IconNotes,
       position: 400,
       cards: [{ type: CardType.NoteCard }],
+      targetObjectNameSingular: CoreObjectNameSingular.Note,
       hide: {
         ifMobile: false,
         ifDesktop: false,
@@ -65,6 +68,7 @@ export const BASE_RECORD_LAYOUT: RecordLayout = {
         ifFeaturesDisabled: [],
         ifRequiredObjectsInactive: [CoreObjectNameSingular.Note],
         ifRelationsMissing: ['noteTargets'],
+        ifNoReadPermission: true,
       },
     },
     files: {

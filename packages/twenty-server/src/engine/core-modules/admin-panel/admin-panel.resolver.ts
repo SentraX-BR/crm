@@ -1,4 +1,4 @@
-import { UseFilters, UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 
 import GraphQLJSON from 'graphql-type-json';
@@ -7,8 +7,6 @@ import { AdminPanelHealthService } from 'src/engine/core-modules/admin-panel/adm
 import { AdminPanelService } from 'src/engine/core-modules/admin-panel/admin-panel.service';
 import { ConfigVariable } from 'src/engine/core-modules/admin-panel/dtos/config-variable.dto';
 import { ConfigVariablesOutput } from 'src/engine/core-modules/admin-panel/dtos/config-variables.output';
-import { ImpersonateInput } from 'src/engine/core-modules/admin-panel/dtos/impersonate.input';
-import { ImpersonateOutput } from 'src/engine/core-modules/admin-panel/dtos/impersonate.output';
 import { SystemHealth } from 'src/engine/core-modules/admin-panel/dtos/system-health.dto';
 import { UpdateWorkspaceFeatureFlagInput } from 'src/engine/core-modules/admin-panel/dtos/update-workspace-feature-flag.input';
 import { UserLookup } from 'src/engine/core-modules/admin-panel/dtos/user-lookup.entity';
@@ -18,23 +16,27 @@ import { QueueMetricsTimeRange } from 'src/engine/core-modules/admin-panel/enums
 import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
 import { FeatureFlagException } from 'src/engine/core-modules/feature-flag/feature-flag.exception';
 import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
+import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
+import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
 import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
 import { HealthIndicatorId } from 'src/engine/core-modules/health/enums/health-indicator-id.enum';
-import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
-import { ConfigVariables } from 'src/engine/core-modules/twenty-config/config-variables';
+import { type MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
+import { type ConfigVariables } from 'src/engine/core-modules/twenty-config/config-variables';
 import { ConfigVariableGraphqlApiExceptionFilter } from 'src/engine/core-modules/twenty-config/filters/config-variable-graphql-api-exception.filter';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { AdminPanelGuard } from 'src/engine/guards/admin-panel-guard';
-import { ImpersonateGuard } from 'src/engine/guards/impersonate-guard';
+import { ServerLevelImpersonateGuard } from 'src/engine/guards/server-level-impersonate.guard';
 import { UserAuthGuard } from 'src/engine/guards/user-auth.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
 
 import { AdminPanelHealthServiceData } from './dtos/admin-panel-health-service-data.dto';
 import { QueueMetricsData } from './dtos/queue-metrics-data.dto';
 
+@UsePipes(ResolverValidationPipe)
 @Resolver()
 @UseFilters(
   AuthGraphqlApiExceptionFilter,
+  PreventNestToAutoLogGraphqlErrorsFilter,
   ConfigVariableGraphqlApiExceptionFilter,
 )
 export class AdminPanelResolver {
@@ -45,15 +47,7 @@ export class AdminPanelResolver {
     private readonly twentyConfigService: TwentyConfigService,
   ) {}
 
-  @UseGuards(WorkspaceAuthGuard, UserAuthGuard, ImpersonateGuard)
-  @Mutation(() => ImpersonateOutput)
-  async impersonate(
-    @Args() { workspaceId, userId }: ImpersonateInput,
-  ): Promise<ImpersonateOutput> {
-    return await this.adminService.impersonate(userId, workspaceId);
-  }
-
-  @UseGuards(WorkspaceAuthGuard, UserAuthGuard, ImpersonateGuard)
+  @UseGuards(WorkspaceAuthGuard, UserAuthGuard, ServerLevelImpersonateGuard)
   @Mutation(() => UserLookup)
   async userLookupAdminPanel(
     @Args() userLookupInput: UserLookupInput,
@@ -61,7 +55,7 @@ export class AdminPanelResolver {
     return await this.adminService.userLookup(userLookupInput.userIdentifier);
   }
 
-  @UseGuards(WorkspaceAuthGuard, UserAuthGuard, ImpersonateGuard)
+  @UseGuards(WorkspaceAuthGuard, UserAuthGuard)
   @Mutation(() => Boolean)
   async updateWorkspaceFeatureFlag(
     @Args() updateFlagInput: UpdateWorkspaceFeatureFlagInput,

@@ -1,18 +1,17 @@
-import { MessageDescriptor } from '@lingui/core';
-import { ObjectType } from 'typeorm';
+import { type MessageDescriptor } from '@lingui/core';
+import { type ObjectType } from 'typeorm';
 
-import { RelationOnDeleteAction } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-on-delete-action.interface';
-import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
+import { type RelationOnDeleteAction } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-on-delete-action.interface';
+import { type RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
 
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { computeMetadataNameFromLabel } from 'src/engine/metadata-modules/utils/validate-name-and-label-are-sync-or-throw.util';
 import { metadataArgsStorage } from 'src/engine/twenty-orm/storage/metadata-args.storage';
 import { TypedReflect } from 'src/utils/typed-reflect';
 
 interface WorkspaceRelationBaseOptions<TClass> {
   standardId: string;
-  label:
-    | MessageDescriptor
-    | ((objectMetadata: ObjectMetadataEntity) => MessageDescriptor);
+  label: MessageDescriptor;
   description?:
     | MessageDescriptor
     | ((objectMetadata: ObjectMetadataEntity) => MessageDescriptor);
@@ -24,7 +23,7 @@ interface WorkspaceRelationBaseOptions<TClass> {
 
 interface WorkspaceOtherRelationOptions<TClass>
   extends WorkspaceRelationBaseOptions<TClass> {
-  type: RelationType.ONE_TO_MANY | RelationType.ONE_TO_ONE;
+  type: RelationType.ONE_TO_MANY;
 }
 
 interface WorkspaceManyToOneRelationOptions<TClass extends object>
@@ -59,25 +58,26 @@ export function WorkspaceRelation<TClass extends object>(
         object,
         propertyKey.toString(),
       ) ?? false;
+    const isUIReadOnly =
+      TypedReflect.getMetadata(
+        'workspace:is-field-ui-readonly-metadata-args',
+        object,
+        propertyKey.toString(),
+      ) ?? false;
     const gate = TypedReflect.getMetadata(
       'workspace:gate-metadata-args',
       object,
       propertyKey.toString(),
     );
+    const name = propertyKey.toString();
+    const label = options.label.message ?? '';
+    const isLabelSyncedWithName = computeMetadataNameFromLabel(label) === name;
 
     metadataArgsStorage.addRelations({
       target: object.constructor,
       standardId: options.standardId,
-      name: propertyKey.toString(),
-      label:
-        typeof options.label === 'function'
-          ? (objectMetadata: ObjectMetadataEntity) =>
-              (
-                options.label as (
-                  obj: ObjectMetadataEntity,
-                ) => MessageDescriptor
-              )(objectMetadata).message ?? ''
-          : (options.label.message ?? ''),
+      name,
+      label,
       type: options.type,
       description:
         typeof options.description === 'function'
@@ -95,7 +95,9 @@ export function WorkspaceRelation<TClass extends object>(
       isPrimary,
       isNullable,
       isSystem,
+      isUIReadOnly,
       gate,
+      isLabelSyncedWithName,
     });
   };
 }

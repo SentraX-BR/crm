@@ -1,20 +1,24 @@
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 import {
-  WorkflowTrigger,
-  WorkflowTriggerType,
+  type WorkflowTrigger,
+  type WorkflowTriggerType,
 } from '@/workflow/types/Workflow';
-import { assertUnreachable } from '@/workflow/utils/assertUnreachable';
 import { DATABASE_TRIGGER_TYPES } from '@/workflow/workflow-trigger/constants/DatabaseTriggerTypes';
 import { getManualTriggerDefaultSettings } from '@/workflow/workflow-trigger/utils/getManualTriggerDefaultSettings';
+import { getManualTriggerDefaultSettingsDeprecated } from '@/workflow/workflow-trigger/utils/getManualTriggerDefaultSettingsDeprecated';
+import { assertUnreachable } from 'twenty-shared/utils';
 
+// TODO: This needs to be migrated to the server
 export const getTriggerDefaultDefinition = ({
   defaultLabel,
   type,
   activeNonSystemObjectMetadataItems,
+  isIteratorEnabled,
 }: {
   defaultLabel: string;
   type: WorkflowTriggerType;
   activeNonSystemObjectMetadataItems: ObjectMetadataItem[];
+  isIteratorEnabled: boolean;
 }): WorkflowTrigger => {
   if (activeNonSystemObjectMetadataItems.length === 0) {
     throw new Error(
@@ -22,11 +26,16 @@ export const getTriggerDefaultDefinition = ({
     );
   }
 
+  const baseTriggerDefinition = {
+    name: defaultLabel,
+    position: { x: 0, y: 0 },
+  };
+
   switch (type) {
     case 'DATABASE_EVENT': {
       return {
+        ...baseTriggerDefinition,
         type,
-        name: defaultLabel,
         settings: {
           eventName: `${activeNonSystemObjectMetadataItems[0].nameSingular}.${
             DATABASE_TRIGGER_TYPES.find(
@@ -38,10 +47,20 @@ export const getTriggerDefaultDefinition = ({
       };
     }
     case 'MANUAL': {
+      if (isIteratorEnabled) {
+        return {
+          ...baseTriggerDefinition,
+          type,
+          settings: getManualTriggerDefaultSettings({
+            availabilityType: 'GLOBAL',
+            activeNonSystemObjectMetadataItems,
+          }),
+        };
+      }
       return {
+        ...baseTriggerDefinition,
         type,
-        name: defaultLabel,
-        settings: getManualTriggerDefaultSettings({
+        settings: getManualTriggerDefaultSettingsDeprecated({
           availability: 'WHEN_RECORD_SELECTED',
           activeNonSystemObjectMetadataItems,
         }),
@@ -49,8 +68,8 @@ export const getTriggerDefaultDefinition = ({
     }
     case 'CRON': {
       return {
+        ...baseTriggerDefinition,
         type,
-        name: defaultLabel,
         settings: {
           type: 'DAYS',
           schedule: { day: 1, hour: 0, minute: 0 },
@@ -60,8 +79,8 @@ export const getTriggerDefaultDefinition = ({
     }
     case 'WEBHOOK': {
       return {
+        ...baseTriggerDefinition,
         type,
-        name: defaultLabel,
         settings: {
           outputSchema: {},
           httpMethod: 'GET',

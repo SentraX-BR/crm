@@ -5,7 +5,7 @@ import { IsNull, Repository } from 'typeorm';
 
 import {
   ActiveOrSuspendedWorkspacesMigrationCommandRunner,
-  RunOnWorkspaceArgs,
+  type RunOnWorkspaceArgs,
 } from 'src/database/commands/command-runners/active-or-suspended-workspaces-migration.command-runner';
 import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
 import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
@@ -16,7 +16,7 @@ import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.
 })
 export class DeduplicateIndexedFieldsCommand extends ActiveOrSuspendedWorkspacesMigrationCommandRunner {
   constructor(
-    @InjectRepository(Workspace, 'core')
+    @InjectRepository(Workspace)
     protected readonly workspaceRepository: Repository<Workspace>,
     protected readonly twentyORMGlobalManager: TwentyORMGlobalManager,
   ) {
@@ -73,6 +73,7 @@ export class DeduplicateIndexedFieldsCommand extends ActiveOrSuspendedWorkspaces
       await this.twentyORMGlobalManager.getRepositoryForWorkspace(
         workspaceId,
         'company',
+        { shouldBypassPermissionChecks: true },
       );
 
     const duplicates = await companyRepository
@@ -121,6 +122,7 @@ export class DeduplicateIndexedFieldsCommand extends ActiveOrSuspendedWorkspaces
       await this.twentyORMGlobalManager.getRepositoryForWorkspace(
         workspaceId,
         'person',
+        { shouldBypassPermissionChecks: true },
       );
 
     const duplicates = await personRepository

@@ -1,4 +1,4 @@
-import { WorkflowTriggerType } from '@/workflow/types/Workflow';
+import { type WorkflowTriggerType } from '@/workflow/types/Workflow';
 import { DatabaseTriggerDefaultLabel } from '@/workflow/workflow-trigger/constants/DatabaseTriggerDefaultLabel';
 
 export const DATABASE_TRIGGER_TYPES: Array<{
@@ -24,5 +24,11 @@ export const DATABASE_TRIGGER_TYPES: Array<{
     type: 'DATABASE_EVENT',
     icon: 'IconTrash',
     event: 'deleted',
+  },
+  {
+    defaultLabel: DatabaseTriggerDefaultLabel.RECORD_UPSERTED,
+    type: 'DATABASE_EVENT',
+    icon: 'IconPencilPlus',
+    event: 'upserted',
   },
 ];

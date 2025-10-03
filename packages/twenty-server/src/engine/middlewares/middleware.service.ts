@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 
-import { Request, Response } from 'express';
+import { type Request, type Response } from 'express';
+import { type APP_LOCALES, SOURCE_LOCALE } from 'twenty-shared/translations';
 import { isDefined } from 'twenty-shared/utils';
 
 import { AuthException } from 'src/engine/core-modules/auth/auth.exception';
 import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
-import { AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { type AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
 import { getAuthExceptionRestStatus } from 'src/engine/core-modules/auth/utils/get-auth-exception-rest-status.util';
 import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import { ErrorCode } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
@@ -19,7 +20,7 @@ import {
   handleExceptionAndConvertToGraphQLError,
 } from 'src/engine/utils/global-exception-handler.util';
 import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
-import { CustomException } from 'src/utils/custom-exception';
+import { type CustomException } from 'src/utils/custom-exception';
 
 @Injectable()
 export class MiddlewareService {
@@ -99,22 +100,24 @@ export class MiddlewareService {
 
   public async hydrateRestRequest(request: Request) {
     const data = await this.accessTokenService.validateTokenByRequest(request);
-    const metadataVersion =
-      await this.workspaceStorageCacheService.getMetadataVersion(
-        data.workspace.id,
-      );
+    const metadataVersion = data.workspace
+      ? await this.workspaceStorageCacheService.getMetadataVersion(
+          data.workspace.id,
+        )
+      : undefined;
 
-    if (metadataVersion === undefined) {
+    if (metadataVersion === undefined && isDefined(data.workspace)) {
       await this.workspaceMetadataCacheService.recomputeMetadataCache({
         workspaceId: data.workspace.id,
       });
       throw new Error('Metadata cache version not found');
     }
 
-    const dataSourcesMetadata =
-      await this.dataSourceService.getDataSourcesMetadataFromWorkspaceId(
-        data.workspace.id,
-      );
+    const dataSourcesMetadata = data.workspace
+      ? await this.dataSourceService.getDataSourcesMetadataFromWorkspaceId(
+          data.workspace.id,
+        )
+      : undefined;
 
     if (!dataSourcesMetadata || dataSourcesMetadata.length === 0) {
       throw new Error('No data sources found');
@@ -125,14 +128,19 @@ export class MiddlewareService {
 
   public async hydrateGraphqlRequest(request: Request) {
     if (!this.isTokenPresent(request)) {
+      request.locale =
+        (request.headers['x-locale'] as keyof typeof APP_LOCALES) ??
+        SOURCE_LOCALE;
+
       return;
     }
 
     const data = await this.accessTokenService.validateTokenByRequest(request);
-    const metadataVersion =
-      await this.workspaceStorageCacheService.getMetadataVersion(
-        data.workspace.id,
-      );
+    const metadataVersion = data.workspace
+      ? await this.workspaceStorageCacheService.getMetadataVersion(
+          data.workspace.id,
+        )
+      : undefined;
 
     this.bindDataToRequestObject(data, request, metadataVersion);
   }
@@ -148,11 +156,19 @@ export class MiddlewareService {
   ) {
     request.user = data.user;
     request.apiKey = data.apiKey;
+    request.userWorkspace = data.userWorkspace;
     request.workspace = data.workspace;
-    request.workspaceId = data.workspace.id;
+    request.workspaceId = data.workspace?.id;
     request.workspaceMetadataVersion = metadataVersion;
     request.workspaceMemberId = data.workspaceMemberId;
     request.userWorkspaceId = data.userWorkspaceId;
+    request.authProvider = data.authProvider;
+    request.impersonationContext = data.impersonationContext;
+
+    request.locale =
+      data.userWorkspace?.locale ??
+      (request.headers['x-locale'] as keyof typeof APP_LOCALES) ??
+      SOURCE_LOCALE;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
